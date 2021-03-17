@@ -1,0 +1,4 @@
+pyzmq
+pyYaml
+keyboard
+python-gnupg

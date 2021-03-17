@@ -1,0 +1,4 @@
+subscribers:
+  - name: 'dell-manjaro'
+    key_id: 'akukulanski@gmail.com'
+gnugp_dir: '/root/.gnupg/'
