@@ -43,6 +43,35 @@ class HookContext:
         self._h()
 
 
+def subscriber_str(sub):
+    return '{} <{}>'.format(sub['name'], sub['key_id'])
+
+
+class State:
+    """
+    Class to track the current state.
+    """
+    def __init__(self, subscribers):
+        self._subscribers = subscribers
+        self.current_sub = 0
+
+    def next(self):
+        self.current_sub += 1
+        self.current_sub %= len(self._subscribers)
+        logger.info('Current sub: {} ({})'.format(
+                self.current_sub,
+                subscriber_str(self._subscribers[self.current_sub])))
+
+    def switch(self, sub):
+        if sub < len(self._subscribers):
+            self.current_sub = sub
+            logger.info('Jumped to sub: {} ({})'.format(
+                self.current_sub,
+                subscriber_str(self._subscribers[self.current_sub])))
+        else:
+            logger.warning('Ignoring invalid sub: {}'.format(sub))
+
+
 _fields_to_send = ['scan_code', 'name', 'event_type', 'time']
 
 
@@ -52,6 +81,21 @@ def get_key_by_id(keys_list, key_id):
             if key_id == uid or '<' + key_id + '>' in uid:
                 return k
     return None
+
+
+def remove_invalid_subs(subs, keys_list):
+    """
+    Checks that key_id is an available key, and deletes the subscriber
+    otherwise. Also adds the fingerprint to the subscriber dict.
+    """
+    for s in subs:
+        key_id = s['key_id']
+        key = get_key_by_id(keys_list=keys_list, key_id=key_id)
+        if not key:
+            logger.warning('Key {} not found. Ignoring.'.format(key_id))
+            del subs[s]
+            continue
+        s['fp'] = key['fingerprint']
 
 
 def main(args=None):
@@ -67,26 +111,34 @@ def main(args=None):
     with open(args.config, 'r') as f:
         config = yaml.load(f.read(), Loader=yaml.FullLoader)
 
-    subs = config['subscribers']
-    n_subs = len(subs)
-    current_sub = 0
-
     gpg = gnupg.GPG(gnupghome=config['gnugp_dir'])
     gpg.encoding = 'utf-8'
     keys_list = gpg.list_keys()
-    logger.debug('Available keys: {}'.format(keys_list))
+    # logger.debug('Available keys: {}'.format(keys_list))
 
-    # check key_id exist and add field fingerprint tp have easier access later.
-    for s in subs:
-        key_id = s['key_id']
-        key = get_key_by_id(keys_list=keys_list, key_id=key_id)
-        if not key:
-            logger.warning('Key {} not found'.format(key_id))
-            del subs[s]
-            continue
-        s['fp'] = key['fingerprint']
+    subs = config['subscribers']
 
+    remove_invalid_subs(subs, keys_list)
     assert len(subs), 'No subscribers available'
+
+    state = State(subs)
+    ignore_list = []
+
+    # assign hotkeys
+    if 'switch_hotkey' in config:
+        keyboard.add_hotkey(config['switch_hotkey'], state.next, args=())
+        ignore_list.append(config['switch_hotkey'])
+        logger.info('Switch key is: {}'.format(config['switch_hotkey']))
+    else:
+        logger.warning('Ignoring switch key due to missing "switch_hotkey" field in config.')
+
+    for i in range(len(subs)):
+        s = subs[i]
+        if 'hotkey' in s and s['hotkey']:
+            keyboard.add_hotkey(s['hotkey'], state.switch, args=(i,))
+            ignore_list.append(s['hotkey'])
+            logger.info('Hotkey for {} is {}'.format(subscriber_str(s),
+                                                     s['hotkey']))
 
     def send_key_zmq(event):
         """
@@ -94,21 +146,23 @@ def main(args=None):
         args:
             event   type: keyboard._KeyboardEvent
         """
-        logger.debug(event)
+        if event.name in ignore_list:
+            logger.debug('Ignored hotkey event ({}).'.format(event.name))
+            return
         event_dict = {k: getattr(event, k) for k in _fields_to_send}
         event_text = json.dumps(event_dict)
-        logger.debug('Current subscriber: {}'.format(current_sub))
+        logger.debug('Current subscriber: {}'.format(state.current_sub))
         logger.debug('Encrypting for {} (fingerprint: {})'.format(
-                            subs[current_sub]['key_id'],
-                            subs[current_sub]['fp']))
-        encrypted = gpg.encrypt(event_text, subs[current_sub]['fp'],
+                            subs[state.current_sub]['key_id'],
+                            subs[state.current_sub]['fp']))
+        encrypted = gpg.encrypt(event_text, subs[state.current_sub]['fp'],
                                 always_trust=True)
         assert encrypted.ok
         logger.debug('Send: {}'.format(str(encrypted)))
         socket.send_string(str(encrypted))
 
     with HookContext(send_key_zmq) as _h_:
-        logger.info('key event publisher is now active')
+        logger.info('Key event publisher is now active.')
         try:
             keyboard.wait()
         except KeyboardInterrupt:
