@@ -1,4 +1,9 @@
 subscribers:
-  - name: 'dell-manjaro'
+  - name: 'client-1'
     key_id: 'akukulanski@gmail.com'
+    hotkey: False
+  - name: 'client-2'
+    key_id: 'akukulanski@gmail.com'
+    hotkey: 'f8'
 gnugp_dir: '/root/.gnupg/'
+switch_hotkey: 'f7'
