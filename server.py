@@ -4,6 +4,7 @@ import json
 import yaml
 import zmq
 import gnupg
+import queue
 import time
 import logging
 import os
@@ -54,6 +55,8 @@ class State:
     def __init__(self, subscribers):
         self._subscribers = subscribers
         self.current_sub = 0
+        self.triggered = False
+        self.last_event = None
 
     def next(self):
         self.current_sub += 1
@@ -70,9 +73,6 @@ class State:
                 subscriber_str(self._subscribers[self.current_sub])))
         else:
             logger.warning('Ignoring invalid sub: {}'.format(sub))
-
-
-_fields_to_send = ['scan_code', 'name', 'event_type', 'time']
 
 
 def get_key_by_id(keys_list, key_id):
@@ -116,12 +116,14 @@ def main(args=None):
     keys_list = gpg.list_keys()
     # logger.debug('Available keys: {}'.format(keys_list))
 
+    fields_to_send = ['scan_code', 'name', 'event_type', 'time']
     subs = config['subscribers']
 
     remove_invalid_subs(subs, keys_list)
     assert len(subs), 'No subscribers available'
 
     state = State(subs)
+    q = queue.Queue()
     ignore_list = []
 
     # assign hotkeys
@@ -140,31 +142,86 @@ def main(args=None):
             logger.info('Hotkey for {} is {}'.format(subscriber_str(s),
                                                      s['hotkey']))
 
-    def send_key_zmq(event):
+    def is_the_same_event(event_a, event_b):
+        if (    event_a['event_type'] == event_b['event_type'] and
+                event_a['scan_code'] == event_b['scan_code'] and
+                event_a['name'] == event_b['name']):
+            return True
+        else:
+            return False
+
+    def add_to_queue(event):
         """
-        send key event over zmq
+        Adds an event to the queue to be sent later with send_zmq().
+        If all the keys pressed in the queue are released, triggers the tx by
+        calling send_zmq().
+
         args:
-            event   type: keyboard._KeyboardEvent
+            event   type: keyboard.KeyboardEvent
         """
         if event.name in ignore_list:
             logger.debug('Ignored hotkey event ({}).'.format(event.name))
             return
-        event_dict = {k: getattr(event, k) for k in _fields_to_send}
-        event_text = json.dumps(event_dict)
+        event_dict = {k: getattr(event, k) for k in fields_to_send}
+        # check if it's the same as the previous one
+        if state.last_event and is_the_same_event(event_dict, state.last_event):
+            return
+        logger.debug('Add to queue: {}'.format(event_dict))
+        q.put(event_dict)
+        state.last_event = event_dict
+        # check if all the pressed keys were released. If so, trigger send_zmq()
+        q_copy = list(q.queue)
+        released = True
+        for i, e in enumerate(q_copy):
+            if e['event_type'] == keyboard.KEY_DOWN:
+                released = False
+                for k in q_copy[i + 1:]:
+                    if k['event_type'] == keyboard.KEY_UP:
+                        released = True
+                        break
+                if not released:
+                    break
+        if released:
+            state.triggered = True
+            send_zmq(last=event_dict)
+
+    def send_zmq(last=None):
+        """
+        Sends events in the queue over zmq.
+        args:
+            last    if a last element is specified, only sends until reaching
+                    that element.
+        """
+        to_send = []
+        while q.qsize() > 0:
+            event = q.get()
+            to_send.append(event)
+            if last and event == last:
+                break
+
+        # remove from here!
         logger.debug('Current subscriber: {}'.format(state.current_sub))
         logger.debug('Encrypting for {} (fingerprint: {})'.format(
                             subs[state.current_sub]['key_id'],
                             subs[state.current_sub]['fp']))
-        encrypted = gpg.encrypt(event_text, subs[state.current_sub]['fp'],
+        #
+
+        to_send_str = json.dumps(to_send)
+        encrypted = gpg.encrypt(to_send_str, subs[state.current_sub]['fp'],
                                 always_trust=True)
         assert encrypted.ok
-        logger.debug('Send: {}'.format(str(encrypted)))
+        logger.info('Sending {} events.'.format(len(to_send)))
+        # logger.debug('Send: {}'.format(str(encrypted))) # TO DO: remove
         socket.send_string(str(encrypted))
 
-    with HookContext(send_key_zmq) as _h_:
+    with HookContext(add_to_queue) as _hook:
         logger.info('Key event publisher is now active.')
         try:
-            keyboard.wait()
+            while True:
+                time.sleep(0.05)
+                if q.qsize() > 0 and not state.triggered:
+                    send_zmq()
+                state.triggered = False
         except KeyboardInterrupt:
             pass
 
