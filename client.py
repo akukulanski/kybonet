@@ -6,7 +6,7 @@ import gnupg
 import time
 import logging
 import os
-
+from keyboard import KeyboardEvent
 
 if __name__ == '__main__':
     debug = os.getenv('DEBUG', None)
@@ -23,6 +23,10 @@ def parse_args(args=None):
     parser.add_argument('-p', '--port', type=int, default=5555, help='port')
     parser.add_argument('--gpghome', type=str, default='/root/.gnupg/',
                         help='gpg home directory')
+    parser.add_argument('--speed', type=float, default=2.0,
+                        help='Playback speed')
+    parser.add_argument('-sim', '--simulate', action='store_true',
+                        help='Simulate, don\'t press/release any key.')
     return parser.parse_args(args)
 
 
@@ -31,6 +35,8 @@ def main(args=None):
 
     ip = args.ip
     port = args.port
+    speed = args.speed
+    simulate = args.simulate
     context = zmq.Context()         
     socket = context.socket(zmq.SUB)
     socket.connect ("tcp://{}:{}".format(ip, port))
@@ -44,18 +50,17 @@ def main(args=None):
     logger.info('key event subscriber is now active')
     while True:
         rcv = socket.recv_string()
-        logger.debug('Recv: {}'.format(rcv))
         decrypted = gpg.decrypt(rcv)
         if decrypted.ok:
             message = str(decrypted)
-            logger.debug('decrypted: {}'.format(message))
-            decoded_event = json.loads(message)
-            logger.debug('decoded: {}'.format(decoded_event))  ## TO DO: remove
-            ## TO DO: key action
+            decoded_events = json.loads(message)
+            # logger.info('decoded: {}'.format(decoded_events))  ## TO DO: remove
+            if not simulate:
+                events = [KeyboardEvent(**event) for event in decoded_events]
+                keyboard.play(events, speed_factor=speed)
         else:
             logger.debug('Unable to decode message... ({})'.format(
                                 decrypted.stderr))
-        time.sleep(0.5)  ## TO DO: remove
 
 
 if __name__ == '__main__':
