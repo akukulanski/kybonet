@@ -6,7 +6,7 @@ This tool allows to share a keyboard connected to a computer with many clients
 (one at a time) over the network. You can switch from one computer to the next
 one with a configurable hotkey (by default *F7*).
 
-How does it work?
+*How does it work?*
 
 The host computer (the one with the keyboard) runs the server, and every
 computer where you want to use that keyboard run the client.
@@ -14,11 +14,9 @@ computer where you want to use that keyboard run the client.
 To keep things easy, there is no point-to-point connection here, but a zmq
 publish/subscribe scheme. The server'll publish the keyboard events encrypted
 with the public key of the selected client, so only that client'll be able to
+decode them. When pressing the hotkey, the server'll start using the public key
+of the 2nd client to encrypt the events. Now only the 2nd client'll be able to
 decode them.
-
-When pressing the hotkey, the server'll start using the public key of the 2nd
-client to encrypt the events. Now only the 2nd client'll be able to decode
-them.
 
 
 ### Setup
@@ -37,7 +35,7 @@ them.
 **NOTE:** The *keyboard* package used by this tool requires root privileges to
 capture the keyboard. It makes sense, since this is esencially a keylogger.
 Nevertheless, always take a look at the code before running random code from
-github! I take no responsibility for any damage it can cause...
+github! I take no responsibility for any damage it can cause... `/(·_·)\`
 
 ### Requirements
 
@@ -54,8 +52,8 @@ python3 -m pip install -r requirements.txt
 
 ### Generate keys for encryption
 
-(**NOTE:** all with root, since it's already required for capturing the
-keyboard input)
+(**NOTE:** with root, since it's already required for capturing the
+keyboard input and by default the keys'll be searched in */root/.gnupg/*)
 
 In the client side: 
 
