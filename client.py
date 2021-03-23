@@ -2,11 +2,12 @@ import argparse
 import keyboard
 import json
 import zmq
-import gnupg
 import time
 import logging
 import os
 from keyboard import KeyboardEvent
+from crypto import import_private_key, decrypt
+
 
 if __name__ == '__main__':
     debug = os.getenv('DEBUG', None)
@@ -21,8 +22,8 @@ def parse_args(args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('ip', type=str, help='ip')
     parser.add_argument('-p', '--port', type=int, default=5555, help='port')
-    parser.add_argument('--gpghome', type=str, default='/root/.gnupg/',
-                        help='gpg home directory')
+    parser.add_argument('-i', '--id-rsa', type=str, default='~/id_rsa',
+                        help='rsa private key path')
     parser.add_argument('--speed', type=float, default=2.0,
                         help='Playback speed')
     parser.add_argument('-sim', '--simulate', action='store_true',
@@ -35,6 +36,7 @@ def main(args=None):
 
     ip = args.ip
     port = args.port
+    id_rsa = args.id_rsa
     speed = args.speed
     simulate = args.simulate
     context = zmq.Context()         
@@ -43,24 +45,24 @@ def main(args=None):
     socket.subscribe('')
     logger.info('running zmq subscriber on {}:{}'.format(ip, port))
 
-    gpg = gnupg.GPG(gnupghome=args.gpghome)
-    gpg.encoding = 'utf-8'
-    logger.debug('available keys: {}'.format(gpg.list_keys()))
+    with open(id_rsa, 'rb') as f:
+        private_key = import_private_key(f.read())
 
     logger.info('key event subscriber is now active')
     while True:
-        rcv = socket.recv_string()
-        decrypted = gpg.decrypt(rcv)
-        if decrypted.ok:
-            message = str(decrypted)
-            decoded_events = json.loads(message)
-            # logger.info('decoded: {}'.format(decoded_events))  ## TO DO: remove
-            if not simulate:
-                events = [KeyboardEvent(**event) for event in decoded_events]
-                keyboard.play(events, speed_factor=speed)
-        else:
-            logger.debug('Unable to decode message... ({})'.format(
-                                decrypted.stderr))
+        rcv = socket.recv()
+        try:
+            decrypted = decrypt(message=rcv, private_key=private_key)
+        except ValueError:
+            txt = 'Unable to decode message... May be it wasn\'t for you?'
+            logger.debug(txt)
+            continue
+        message = decrypted.decode('utf-8')
+        decoded_events = json.loads(message)
+        # logger.info('decoded: {}'.format(decoded_events))  ## TO DO: remove
+        if not simulate:
+            events = [KeyboardEvent(**event) for event in decoded_events]
+            keyboard.play(events, speed_factor=speed)
 
 
 if __name__ == '__main__':
