@@ -1,4 +1,4 @@
-# keyboard over network (with encryption!)
+# Kybonet - keyboard over network (with encryption!)
 
 ### Description
 
@@ -59,7 +59,7 @@ capture the keyboard. It makes sense, since this is esencially a keylogger.
 Nevertheless, always take a look at the code before running random code from
 github! I take no responsibility for any damage it can cause... `/(·_·)\`
 
-Tip: To avoid duplicating every Python package for the *root* user, just set
+**Tip:** To avoid duplicating every Python package for the *root* user, just set
 the PYTHONPATH acordingly. For example, if you have python3.7, probably you'll
 have the packages installed in `/home/<YOUR-USER>/.local/lib/python3.7/site-packages/`.
 
@@ -77,9 +77,7 @@ sudo su -c "PYTHONPATH=/home/<YOUR-USER>/.local/lib/python3.9/site-packages/ DEB
 
 5. Start typing!
 
-### Misc
-
 **NOTE:** since this'll run with root, it's better to create the keys also
 with root so the private key is not visible to less privileged users.
 
-Debug: To increment the verbosity set the env `DEBUG`.
+**NOTE:** To increment the verbosity set the env `DEBUG`.
