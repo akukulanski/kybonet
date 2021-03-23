@@ -58,11 +58,10 @@ def main(args=None):
             logger.debug(txt)
             continue
         message = decrypted.decode('utf-8')
-        decoded_events = json.loads(message)
-        # logger.info('decoded: {}'.format(decoded_events))  ## TO DO: remove
+        decoded_event = json.loads(message)
         if not simulate:
-            events = [KeyboardEvent(**event) for event in decoded_events]
-            keyboard.play(events, speed_factor=speed)
+            event = KeyboardEvent(**decoded_event)
+            keyboard.play([event], speed_factor=speed)
 
 
 if __name__ == '__main__':
