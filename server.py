@@ -3,11 +3,11 @@ import keyboard
 import json
 import yaml
 import zmq
-import gnupg
 import queue
 import time
 import logging
 import os
+from crypto import import_public_key, encrypt
 
 
 if __name__ == '__main__':
@@ -27,6 +27,26 @@ def parse_args(args=None):
     return parser.parse_args(args)
 
 
+def load_subscribers(subs):
+    """
+    Reads the public key of every subscriber and stores it in the field
+    'public_key'.
+    """
+    for s in subs:
+        print('s={}'.format(s))
+        try:
+            n = s['name']
+            with open(s['key'], 'rb') as f:
+                key = import_public_key(f.read())
+            s['public_key'] = key
+        except Exception as e:
+            logger.error(e)
+            logger.warning('Error importing key for "{}"'.format(s['name']))
+            subs.remove(s)
+            continue
+        logger.info('Successfully imported key for "{}"'.format(s['name']))
+
+
 class HookContext:
     """
     Profilactic Context Manager:
@@ -44,10 +64,6 @@ class HookContext:
         self._h()
 
 
-def subscriber_str(sub):
-    return '{} <{}>'.format(sub['name'], sub['key_id'])
-
-
 class State:
     """
     Class to track the current state.
@@ -63,39 +79,16 @@ class State:
         self.current_sub %= len(self._subscribers)
         logger.info('Current sub: {} ({})'.format(
                 self.current_sub,
-                subscriber_str(self._subscribers[self.current_sub])))
+                self._subscribers[self.current_sub]['name']))
 
     def switch(self, sub):
         if sub < len(self._subscribers):
             self.current_sub = sub
             logger.info('Jumped to sub: {} ({})'.format(
                 self.current_sub,
-                subscriber_str(self._subscribers[self.current_sub])))
+                self._subscribers[self.current_sub]['name']))
         else:
             logger.warning('Ignoring invalid sub: {}'.format(sub))
-
-
-def get_key_by_id(keys_list, key_id):
-    for k in keys_list:
-        for uid in k['uids']:
-            if key_id == uid or '<' + key_id + '>' in uid:
-                return k
-    return None
-
-
-def remove_invalid_subs(subs, keys_list):
-    """
-    Checks that key_id is an available key, and deletes the subscriber
-    otherwise. Also adds the fingerprint to the subscriber dict.
-    """
-    for s in subs:
-        key_id = s['key_id']
-        key = get_key_by_id(keys_list=keys_list, key_id=key_id)
-        if not key:
-            logger.warning('Key {} not found. Ignoring.'.format(key_id))
-            del subs[s]
-            continue
-        s['fp'] = key['fingerprint']
 
 
 def main(args=None):
@@ -111,15 +104,10 @@ def main(args=None):
     with open(args.config, 'r') as f:
         config = yaml.load(f.read(), Loader=yaml.FullLoader)
 
-    gpg = gnupg.GPG(gnupghome=config['gnupg_dir'])
-    gpg.encoding = 'utf-8'
-    keys_list = gpg.list_keys()
-    # logger.debug('Available keys: {}'.format(keys_list))
-
     fields_to_send = ['scan_code', 'name', 'event_type', 'time']
-    subs = config['subscribers']
 
-    remove_invalid_subs(subs, keys_list)
+    subs = config['subscribers']
+    load_subscribers(subs)
     assert len(subs), 'No subscribers available'
 
     state = State(subs)
@@ -139,7 +127,7 @@ def main(args=None):
         if 'hotkey' in s and s['hotkey']:
             keyboard.add_hotkey(s['hotkey'], state.switch, args=(i,))
             ignore_list.append(s['hotkey'])
-            logger.info('Hotkey for {} is {}'.format(subscriber_str(s),
+            logger.info('Hotkey for {} is {}'.format(s['name'],
                                                      s['hotkey']))
 
     def is_the_same_event(event_a, event_b):
@@ -181,7 +169,7 @@ def main(args=None):
                         break
                 if not released:
                     break
-        if released:
+        if released or True:
             state.triggered = True
             send_zmq(last=event_dict)
 
@@ -200,28 +188,28 @@ def main(args=None):
                 break
 
         # remove from here!
-        logger.debug('Current subscriber: {}'.format(state.current_sub))
-        logger.debug('Encrypting for {} (fingerprint: {})'.format(
-                            subs[state.current_sub]['key_id'],
-                            subs[state.current_sub]['fp']))
-        #
+        logger.debug('Current subscriber: {} ("{}")'.format(
+                            state.current_sub,
+                            subs[state.current_sub]['name']))
 
         to_send_str = json.dumps(to_send)
-        encrypted = gpg.encrypt(to_send_str, subs[state.current_sub]['fp'],
-                                always_trust=True)
-        assert encrypted.ok
+        logger.warning('to_send_str: {} (len={})'.format(to_send_str,
+                                                         len(to_send_str))) # TO DO: remove
+        encrypted = encrypt(message=to_send_str.encode('utf-8'),
+                            public_key=subs[state.current_sub]['public_key'])
         logger.info('Sending {} events.'.format(len(to_send)))
         # logger.debug('Send: {}'.format(str(encrypted))) # TO DO: remove
-        socket.send_string(str(encrypted))
+        socket.send(encrypted)
 
     with HookContext(add_to_queue) as _hook:
         logger.info('Key event publisher is now active.')
         try:
             while True:
-                time.sleep(0.05)
-                if q.qsize() > 0 and not state.triggered:
-                    send_zmq()
-                state.triggered = False
+                time.sleep(1e6)
+                # time.sleep(0.05)
+                # if q.qsize() > 0 and not state.triggered:
+                #     send_zmq()
+                # state.triggered = False
         except KeyboardInterrupt:
             pass
 
