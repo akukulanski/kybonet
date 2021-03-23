@@ -1,4 +1,4 @@
 pyzmq
 pyYaml
 keyboard
-python-gnupg
+cryptography
