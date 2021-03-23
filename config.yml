@@ -5,5 +5,5 @@ subscribers:
   - name: 'client-2'
     key_id: 'akukulanski@gmail.com'
     hotkey: 'f8'
-gnugp_dir: '/root/.gnupg/'
+gnupg_dir: '/root/.gnupg/'
 switch_hotkey: 'f7'

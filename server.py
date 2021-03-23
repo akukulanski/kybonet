@@ -111,7 +111,7 @@ def main(args=None):
     with open(args.config, 'r') as f:
         config = yaml.load(f.read(), Loader=yaml.FullLoader)
 
-    gpg = gnupg.GPG(gnupghome=config['gnugp_dir'])
+    gpg = gnupg.GPG(gnupghome=config['gnupg_dir'])
     gpg.encoding = 'utf-8'
     keys_list = gpg.list_keys()
     # logger.debug('Available keys: {}'.format(keys_list))
