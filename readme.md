@@ -21,106 +21,65 @@ decode them.
 
 ### Setup
 
-1. Install the required packages (all python packages installable with pip
-   except for *GPG*).
+1. Install the required packages in both the server and the clients.
 
-2. set-up the gpg keys.
+```bash
+apt install python3 python3-pip
+python3 -m pip install -r requirements.txt
+```
 
-3. run the server in the computer with the keyboard.
+2. Generate public/private keys pair.
 
-4. run the clients in the other computers.
+```bash
+# generate
+python3 crypto.py
+# Copy public key to the server
+scp <filename.pub> <user>@<host>:<path>/
+```
 
-5. start typing
+3. In the server side, add the path of every client's public key in the config
+file *config.yml*:
+
+Example of *config.yml*:
+```yaml
+subscribers:
+  - name: 'client-1'
+    key: '/root/id_client1.pub'
+    hotkey: False
+  - name: 'client-2'
+    key: '/root/id_client2.pub'
+    hotkey: 'f8'
+switch_hotkey: 'f7'
+```
+
+### Run
 
 **NOTE:** The *keyboard* package used by this tool requires root privileges to
 capture the keyboard. It makes sense, since this is esencially a keylogger.
 Nevertheless, always take a look at the code before running random code from
 github! I take no responsibility for any damage it can cause... `/(·_·)\`
 
-### Requirements
-
-* python3
-* python3-pip
-* gpg
-* python packages listed in *requirements.txt*
-
-Install requirements:
-```
-apt install python3 python3-pip gpg
-python3 -m pip install -r requirements.txt
-```
-
-### Generate keys for encryption
-
-(**NOTE:** with root, since it's already required for capturing the
-keyboard input and by default the keys'll be searched in */root/.gnupg/*)
-
-In the client side: 
-
-* Log in as root:
-```bash
-sudo su
-```
-
-* Generate public/private keys pair: (no passphrase)
-```bash
-gpg --full-generate-key
-```
-
-* Export the public key:
-```bash
-gpg --export --armor --output <filename>.pub
-```
-
-* Copy the public key in the server:
-```bash
-scp <filename.pub> <user>@<host>:<path>/
-```
-
-In the server side:
-
-* Log in as root:
-```bash
-sudo su
-```
-
-* Import the generated public key:
-```bash
-gpg --import <path>/<filename.pub>
-```
-
-* Add the key to the config file (`config.yml`) including the key *ID* and a
-name. Also a hotkey can be assigned to switch the keyboard to that client.
-Example config file with two keys:
-```yaml
-subscribers:
-  - name: 'a-meaningful-name'
-    key_id: 'one@email.com'  # the same one used to generate the key!
-    hotkey: False
-  - name: 'another-meaningful-name'
-    key_id: 'another@email.com'  # the same one used to generate the key!
-    hotkey: 'f8'
-gnugp_dir: '/root/.gnupg/'
-switch_hotkey: 'f7'
-```
-
-### Misc
-
-* about PATHs...
-
-To avoid duplicating every Python package for the *root* user, just set
+Tip: To avoid duplicating every Python package for the *root* user, just set
 the PYTHONPATH acordingly. For example, if you have python3.7, probably you'll
 have the packages installed in `/home/<YOUR-USER>/.local/lib/python3.7/site-packages/`.
-So you can ran:
 
-server:
+* Run the server in the computer with the keyboard.
+
 ```bash
 sudo su -c "PYTHONPATH=/home/<YOUR-USER>/.local/lib/python3.7/site-packages/ python3 server.py -p <PORT>"
 ```
 
-client:
+* Run the clients in the other computers.
+
 ```bash
-sudo su -c "PYTHONPATH=/home/<YOUR-USER>/.local/lib/python3.9/site-packages/ DEBUG=1 python3 client.py <SERVER-IP> -p <PORT>"
+sudo su -c "PYTHONPATH=/home/<YOUR-USER>/.local/lib/python3.9/site-packages/ DEBUG=1 python3 client.py <SERVER-IP> -p <PORT> -i <PATH_PRIVATE_KEY>"
 ```
 
-* Debug: To increment the verbosity set the env `DEBUG`.
+5. Start typing!
+
+### Misc
+
+**NOTE:** since this'll run with root, it's better to create the keys also
+with root so the private key is not visible to less privileged users.
+
+Debug: To increment the verbosity set the env `DEBUG`.
