@@ -33,7 +33,6 @@ def load_subscribers(subs):
     'public_key'.
     """
     for s in subs:
-        print('s={}'.format(s))
         try:
             n = s['name']
             with open(s['key'], 'rb') as f:
@@ -71,7 +70,6 @@ class State:
     def __init__(self, subscribers):
         self._subscribers = subscribers
         self.current_sub = 0
-        self.triggered = False
         self.last_event = None
 
     def next(self):
@@ -111,7 +109,6 @@ def main(args=None):
     assert len(subs), 'No subscribers available'
 
     state = State(subs)
-    q = queue.Queue()
     ignore_list = []
 
     # assign hotkeys
@@ -138,12 +135,8 @@ def main(args=None):
         else:
             return False
 
-    def add_to_queue(event):
+    def key_event_arrived(event):
         """
-        Adds an event to the queue to be sent later with send_zmq().
-        If all the keys pressed in the queue are released, triggers the tx by
-        calling send_zmq().
-
         args:
             event   type: keyboard.KeyboardEvent
         """
@@ -154,62 +147,23 @@ def main(args=None):
         # check if it's the same as the previous one
         if state.last_event and is_the_same_event(event_dict, state.last_event):
             return
-        logger.debug('Add to queue: {}'.format(event_dict))
-        q.put(event_dict)
-        state.last_event = event_dict
-        # check if all the pressed keys were released. If so, trigger send_zmq()
-        q_copy = list(q.queue)
-        released = True
-        for i, e in enumerate(q_copy):
-            if e['event_type'] == keyboard.KEY_DOWN:
-                released = False
-                for k in q_copy[i + 1:]:
-                    if k['event_type'] == keyboard.KEY_UP:
-                        released = True
-                        break
-                if not released:
-                    break
-        if released or True:
-            state.triggered = True
-            send_zmq(last=event_dict)
 
-    def send_zmq(last=None):
-        """
-        Sends events in the queue over zmq.
-        args:
-            last    if a last element is specified, only sends until reaching
-                    that element.
-        """
-        to_send = []
-        while q.qsize() > 0:
-            event = q.get()
-            to_send.append(event)
-            if last and event == last:
-                break
-
-        # remove from here!
-        logger.debug('Current subscriber: {} ("{}")'.format(
-                            state.current_sub,
+        logger.debug('Current subscriber: "{}"'.format(
                             subs[state.current_sub]['name']))
 
-        to_send_str = json.dumps(to_send)
-        logger.warning('to_send_str: {} (len={})'.format(to_send_str,
-                                                         len(to_send_str))) # TO DO: remove
+        state.last_event = event_dict
+        to_send_str = json.dumps(event_dict)
         encrypted = encrypt(message=to_send_str.encode('utf-8'),
                             public_key=subs[state.current_sub]['public_key'])
-        logger.info('Sending {} events.'.format(len(to_send)))
-        # logger.debug('Send: {}'.format(str(encrypted))) # TO DO: remove
         socket.send(encrypted)
 
-    with HookContext(add_to_queue) as _hook:
+    with HookContext(key_event_arrived) as _hook:
         logger.info('Key event publisher is now active.')
+        logger.info('Current subscriber: {}'.format(
+                            subs[state.current_sub]['name']))
         try:
             while True:
                 time.sleep(1e6)
-                # time.sleep(0.05)
-                # if q.qsize() > 0 and not state.triggered:
-                #     send_zmq()
-                # state.triggered = False
         except KeyboardInterrupt:
             pass
 
