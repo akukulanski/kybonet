@@ -1,9 +1,8 @@
 subscribers:
   - name: 'client-1'
-    key_id: 'akukulanski@gmail.com'
+    key: './id_rsa1.pub'
     hotkey: False
   - name: 'client-2'
-    key_id: 'akukulanski@gmail.com'
+    key: './id_rsa2.pub'
     hotkey: 'f8'
-gnupg_dir: '/root/.gnupg/'
 switch_hotkey: 'f7'
