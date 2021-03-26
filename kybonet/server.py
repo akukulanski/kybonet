@@ -3,8 +3,6 @@ import keyboard
 import json
 import yaml
 import zmq
-import queue
-import time
 import select
 import logging
 import os
@@ -36,7 +34,6 @@ def load_subscribers(subs):
     """
     for s in subs:
         try:
-            n = s['name']
             with open(s['key'], 'rb') as f:
                 key = import_public_key(f.read())
             s['public_key'] = key
@@ -99,7 +96,6 @@ def main(args=None):
     socket = context.socket(zmq.PUB)
     socket.bind("tcp://*:{}".format(port))
     logger.info('running zmq publisher on port {}'.format(port))
-    # socket.bind("tcp://127.0.0.1:{}".format(port))
 
     with open(args.config, 'r') as f:
         config = yaml.load(f.read(), Loader=yaml.FullLoader)
@@ -117,7 +113,8 @@ def main(args=None):
         ignore_list.append(config['switch_hotkey'])
         logger.info('Switch key is: {}'.format(config['switch_hotkey']))
     else:
-        logger.warning('Ignoring switch key due to missing "switch_hotkey" field in config.')
+        logger.warning('Ignoring switch key due to missing "switch_hotkey" '
+                       'field in config.')
 
     for i in range(len(subs)):
         s = subs[i]
@@ -128,7 +125,7 @@ def main(args=None):
                                                      s['hotkey']))
 
     def is_the_same_event(event_a, event_b):
-        if (    event_a['event_type'] == event_b['event_type'] and
+        if (event_a['event_type'] == event_b['event_type'] and
                 event_a['scan_code'] == event_b['scan_code'] and
                 event_a['name'] == event_b['name']):
             return True
@@ -173,14 +170,12 @@ def main(args=None):
 
         if isinstance(event, keyboard.KeyboardEvent):
             # check if it's the same as the previous one
-            if state.last_event and is_the_same_event(event_dict, state.last_event):
+            if state.last_event and is_the_same_event(event_dict,
+                                                      state.last_event):
                 return
             state.last_event = event_dict
 
-        logger.debug('Current subscriber: "{}"'.format(
-                            subs[state.current_sub]['name']))
         to_send_str = json.dumps(event_dict)
-        # logger.debug('send(): {}'.format(to_send_str))
         encrypted = encrypt(message=to_send_str.encode('utf-8'),
                             public_key=subs[state.current_sub]['public_key'])
         socket.send(encrypted)
@@ -190,8 +185,9 @@ def main(args=None):
     device = devices[0]
     device_fd = device.fd
     device.read()
+    MouseEventConstructor = mouse_dev.MouseEvent.from_event
 
-    with KeyboardHookContext(event_callback) as _hook_k:
+    with KeyboardHookContext(event_callback):
         logger.info('Key event publisher is now active.')
         logger.info('Current subscriber: {}'.format(
                             subs[state.current_sub]['name']))
@@ -199,13 +195,10 @@ def main(args=None):
             while True:
                 r, _w, _e = select.select([device_fd], [], [], 0.05)
                 if r:
-                    events = [mouse_dev.MouseEvent.from_event(e) for e in list(device.read())]
+                    raw_events = list(device.read())
+                    events = [MouseEventConstructor(e) for e in raw_events]
                     valid_events = [e for e in events if e.is_valid()]
                     merged_events = merge_events(valid_events)
-                    print('{} events merged into {}!'.format(len(valid_events),
-                                                             len(merged_events)))
-                    print('---Unmerged: {}'.format(valid_events))
-                    print('---Merged: {}'.format(merged_events))
                     for mouse_event in merged_events:
                         event_callback(mouse_event)
         except KeyboardInterrupt:
