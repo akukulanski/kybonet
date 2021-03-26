@@ -161,7 +161,7 @@ def main(args=None):
         logger.debug('Current subscriber: "{}"'.format(
                             subs[state.current_sub]['name']))
         to_send_str = json.dumps(event_dict)
-        logger.debug('send(): {}'.format(to_send_str))
+        # logger.debug('send(): {}'.format(to_send_str))
         encrypted = encrypt(message=to_send_str.encode('utf-8'),
                             public_key=subs[state.current_sub]['public_key'])
         socket.send(encrypted)
@@ -178,6 +178,7 @@ def main(args=None):
                             subs[state.current_sub]['name']))
         try:
             while True:
+                # to do: group rel events and send the sum after XX ms.
                 r, w, e = select.select([device_fd], [], [], 0.0)
                 if r:
                     for event in device.read():
