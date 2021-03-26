@@ -1,14 +1,17 @@
-# Kybonet - keyboard over network (with encryption!)
+# Kybonet - software KVM switch with encryption!
 
 ### Description
 
-This tool allows to share a keyboard connected to a computer with many clients
-(one at a time) over the network. You can switch from one computer to the next
-one with a configurable hotkey (by default *F7*).
+
+Share your keyboard and mouse connected to a computer over the network!
+
+This tool allows to share your input devices with many computers in the same
+network (one at a time). You can switch from one computer to the next one
+with a configurable hotkey (by default *F7*).
 
 *How does it work?*
 
-The host computer (the one with the keyboard) runs the server, and every
+The host computer (the one with the keyboard/mouse) runs the server, and every
 computer where you want to use that keyboard run the client.
 
 To keep things easy, there is no point-to-point connection here, but a zmq
@@ -60,19 +63,20 @@ Nevertheless, always take a look at the code before running random code from
 github! I take no responsibility for any damage it can cause... `/(·_·)\`
 
 **Tip:** To avoid duplicating every Python package for the *root* user, just set
-the PYTHONPATH acordingly. For example, if you have python3.7, probably you'll
+the PYTHONPATH acordingly. For example, if you have python3.7, you'll probably
 have the packages installed in `/home/<YOUR-USER>/.local/lib/python3.7/site-packages/`.
+If you are using a virtual env, even better!
 
 * Run the server in the computer with the keyboard.
 
 ```bash
-sudo su -c "PYTHONPATH=/home/<YOUR-USER>/.local/lib/python3.7/site-packages/ python3 server.py -p <PORT>"
+sudo su -c "PYTHONPATH=path/to/python/packages python3 server.py -p <PORT>"
 ```
 
 * Run the clients in the other computers.
 
 ```bash
-sudo su -c "PYTHONPATH=/home/<YOUR-USER>/.local/lib/python3.9/site-packages/ DEBUG=1 python3 client.py <SERVER-IP> -p <PORT> -i <PATH_PRIVATE_KEY>"
+sudo su -c "PYTHONPATH=path/to/python/packages python3 client.py <SERVER-IP> -p <PORT> -i <PATH_PRIVATE_KEY>"
 ```
 
 5. Start typing!
