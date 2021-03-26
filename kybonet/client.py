@@ -2,10 +2,8 @@ import argparse
 import keyboard
 import json
 import zmq
-import time
 import logging
 import os
-from keyboard import KeyboardEvent
 from crypto import import_private_key, decrypt
 import mouse_dev
 
@@ -51,9 +49,9 @@ def main(args=None):
     id_rsa = args.id_rsa
     speed = args.speed
     simulate = args.simulate
-    context = zmq.Context()         
+    context = zmq.Context()
     socket = context.socket(zmq.SUB)
-    socket.connect ("tcp://{}:{}".format(ip, port))
+    socket.connect("tcp://{}:{}".format(ip, port))
     socket.subscribe('')
     logger.info('running zmq subscriber on {}:{}'.format(ip, port))
 
@@ -76,7 +74,6 @@ def main(args=None):
         event = create_event_from_dict(decoded_event)
         if not simulate:
             if isinstance(event, keyboard.KeyboardEvent):
-                # event = KeyboardEvent(**decoded_event)
                 keyboard.play([event], speed_factor=speed)
             elif isinstance(event, mouse_dev.MouseEvent):
                 device.write_event(event)
