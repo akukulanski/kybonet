@@ -2,3 +2,4 @@ pyzmq
 pyYaml
 keyboard
 cryptography
+evdev
