@@ -135,6 +135,25 @@ def main(args=None):
         else:
             return False
 
+    def merge_events(events):
+        merged_events = []
+        rel_movement = mouse_dev.RelativeMovement()
+        for e in events:
+            if e.is_rel_movement():
+                x, y, wheel = e.get_rel_movement()
+                if rel_movement.is_mergeable(x, y, wheel):
+                    rel_movement.merge(x, y, wheel)
+                else:
+                    merged_events += rel_movement.generate_events()
+                    rel_movement.set(x, y, wheel)
+            else:
+                merged_events += rel_movement.generate_events()
+                rel_movement.set(0, 0, 0)
+                merged_events.append(e)
+        merged_events += rel_movement.generate_events()
+        rel_movement.set(0, 0, 0)
+        return merged_events
+
     def event_callback(event):
         """
         args:
@@ -178,15 +197,17 @@ def main(args=None):
                             subs[state.current_sub]['name']))
         try:
             while True:
-                # to do: group rel events and send the sum after XX ms.
-                r, w, e = select.select([device_fd], [], [], 0.0)
+                r, _w, _e = select.select([device_fd], [], [], 0.05)
                 if r:
-                    for event in device.read():
-                        mouse_event = mouse_dev.MouseEvent.from_event(event)
-                        if mouse_event.is_valid():
-                            event_callback(mouse_event)
-                else:
-                    time.sleep(0.05)
+                    events = [mouse_dev.MouseEvent.from_event(e) for e in list(device.read())]
+                    valid_events = [e for e in events if e.is_valid()]
+                    merged_events = merge_events(valid_events)
+                    print('{} events merged into {}!'.format(len(valid_events),
+                                                             len(merged_events)))
+                    print('---Unmerged: {}'.format(valid_events))
+                    print('---Merged: {}'.format(merged_events))
+                    for mouse_event in merged_events:
+                        event_callback(mouse_event)
         except KeyboardInterrupt:
             pass
 
