@@ -1,5 +1,6 @@
 import evdev
 import time
+from collections import namedtuple
 from evdev import UInput, AbsInfo, ecodes
 
 
@@ -67,7 +68,7 @@ class MouseEvent:
 
     @classmethod
     def from_event(cls, event):
-        return cls(event.type, event.code, event.value)
+        return cls(event.type, event.code, event.value, time.time())
 
     def is_valid(self):
         if self.etype == ecodes.EV_REL:
@@ -89,6 +90,59 @@ class MouseEvent:
                 event_type = _ev_key_types[self.value]
                 return MouseButtonEvent(event_type=event_type, button=button)
         return None
+
+    def is_rel_movement(self):
+        return self.etype == ecodes.EV_REL
+
+    def get_rel_movement(self):
+        if self.etype == ecodes.EV_REL:
+            x = self.value if self.code == ecodes.REL_X else 0
+            y = self.value if self.code == ecodes.REL_Y else 0
+            wheel = self.value if self.code == ecodes.REL_WHEEL else 0
+        else:
+            x, y, wheel = (0, 0, 0)
+        return (x, y, wheel)
+
+
+class RelativeMovement:
+    def __init__(self):
+        self.x = 0
+        self.y = 0
+        self.wheel = 0
+        self.time = time.time()
+
+    def set(self, x, y, wheel):
+        self.x = x
+        self.y = y
+        self.wheel = wheel
+        self.time = time.time()
+
+    def is_mergeable(self, x, y, wheel):
+        # a new relative movement can be merged if there is no change in any
+        # of the directions.
+        # (a * b) is less than 0 if the signs of (a) and (b) differ.
+        if x * self.x < 0 or y * self.y < 0 or wheel * self.wheel < 0:
+            return False
+        else:
+            return True
+
+    def merge(self, x, y, wheel):
+        self.x += x
+        self.y += y
+        self.wheel += wheel
+
+    def generate_events(self):
+        events = []
+        if self.x != 0:
+            events.append(MouseEvent(etype=ecodes.EV_REL, code=ecodes.REL_X,
+                                     value=self.x, time=self.time))
+        if self.y != 0:
+            events.append(MouseEvent(etype=ecodes.EV_REL, code=ecodes.REL_Y,
+                                     value=self.y, time=self.time))
+        if self.wheel != 0:
+            events.append(MouseEvent(etype=ecodes.EV_REL, code=ecodes.REL_WHEEL,
+                                     value=self.wheel, time=self.time))
+        return events
 
 
 
