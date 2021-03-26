@@ -7,6 +7,7 @@ import logging
 import os
 from keyboard import KeyboardEvent
 from crypto import import_private_key, decrypt
+import mouse_dev
 
 
 if __name__ == '__main__':
@@ -31,6 +32,17 @@ def parse_args(args=None):
     return parser.parse_args(args)
 
 
+def create_event_from_dict(event_dict):
+    keyboard_fields = ['scan_code', 'name', 'event_type', 'time']
+    mouse_fields = ['etype', 'code', 'value', 'time']
+    for class_, fields in zip([keyboard.KeyboardEvent, mouse_dev.MouseEvent],
+                              [keyboard_fields, mouse_fields]):
+        fields_present = [f in event_dict for f in fields]
+        if all(fields_present):
+            return class_(**event_dict)
+    return None
+
+
 def main(args=None):
     args = parse_args(args=args)
 
@@ -44,6 +56,8 @@ def main(args=None):
     socket.connect ("tcp://{}:{}".format(ip, port))
     socket.subscribe('')
     logger.info('running zmq subscriber on {}:{}'.format(ip, port))
+
+    device = mouse_dev.FakeMouse(name='my-fake-mouse')
 
     with open(id_rsa, 'rb') as f:
         private_key = import_private_key(f.read())
@@ -59,9 +73,16 @@ def main(args=None):
             continue
         message = decrypted.decode('utf-8')
         decoded_event = json.loads(message)
+        event = create_event_from_dict(decoded_event)
         if not simulate:
-            event = KeyboardEvent(**decoded_event)
-            keyboard.play([event], speed_factor=speed)
+            if isinstance(event, keyboard.KeyboardEvent):
+                # event = KeyboardEvent(**decoded_event)
+                keyboard.play([event], speed_factor=speed)
+            elif isinstance(event, mouse_dev.MouseEvent):
+                device.write_event(event)
+            else:
+                logger.error('Unknown event type: {}'.format(decoded_event))
+                continue
 
 
 if __name__ == '__main__':
