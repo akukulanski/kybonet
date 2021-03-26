@@ -5,8 +5,10 @@ import yaml
 import zmq
 import queue
 import time
+import select
 import logging
 import os
+import mouse_dev
 from crypto import import_public_key, encrypt
 
 
@@ -46,7 +48,7 @@ def load_subscribers(subs):
         logger.info('Successfully imported key for "{}"'.format(s['name']))
 
 
-class HookContext:
+class KeyboardHookContext:
     """
     Profilactic Context Manager:
     The hook returns a destructor. If you forget to use it and lose the object
@@ -102,8 +104,6 @@ def main(args=None):
     with open(args.config, 'r') as f:
         config = yaml.load(f.read(), Loader=yaml.FullLoader)
 
-    fields_to_send = ['scan_code', 'name', 'event_type', 'time']
-
     subs = config['subscribers']
     load_subscribers(subs)
     assert len(subs), 'No subscribers available'
@@ -135,35 +135,57 @@ def main(args=None):
         else:
             return False
 
-    def key_event_arrived(event):
+    def event_callback(event):
         """
         args:
-            event   type: keyboard.KeyboardEvent
+            event   type: one of [keyboard.KeyboardEvent, mouse.ButtonEvent,
+                    mouse.WheelEvent, mouse.MoveEvent]
         """
-        if event.name in ignore_list:
-            logger.debug('Ignored hotkey event ({}).'.format(event.name))
-            return
-        event_dict = {k: getattr(event, k) for k in fields_to_send}
-        # check if it's the same as the previous one
-        if state.last_event and is_the_same_event(event_dict, state.last_event):
-            return
+        logger.debug('Event: {}'.format(event))
+        if isinstance(event, keyboard.KeyboardEvent):
+            if event.name in ignore_list:
+                logger.debug('Ignored hotkey event ({}).'.format(event.name))
+                return
+            fields = ['scan_code', 'name', 'event_type', 'time']
+        elif isinstance(event, mouse_dev.MouseEvent):
+            fields = ['etype', 'code', 'value', 'time']
+
+        event_dict = {k: getattr(event, k) for k in fields}
+
+        if isinstance(event, keyboard.KeyboardEvent):
+            # check if it's the same as the previous one
+            if state.last_event and is_the_same_event(event_dict, state.last_event):
+                return
+            state.last_event = event_dict
 
         logger.debug('Current subscriber: "{}"'.format(
                             subs[state.current_sub]['name']))
-
-        state.last_event = event_dict
         to_send_str = json.dumps(event_dict)
+        logger.debug('send(): {}'.format(to_send_str))
         encrypted = encrypt(message=to_send_str.encode('utf-8'),
                             public_key=subs[state.current_sub]['public_key'])
         socket.send(encrypted)
 
-    with HookContext(key_event_arrived) as _hook:
+    devices = mouse_dev.find_devices()
+    assert len(devices), 'No mouses found'
+    device = devices[0]
+    device_fd = device.fd
+    device.read()
+
+    with KeyboardHookContext(event_callback) as _hook_k:
         logger.info('Key event publisher is now active.')
         logger.info('Current subscriber: {}'.format(
                             subs[state.current_sub]['name']))
         try:
             while True:
-                time.sleep(1e6)
+                r, w, e = select.select([device_fd], [], [], 0.0)
+                if r:
+                    for event in device.read():
+                        mouse_event = mouse_dev.MouseEvent.from_event(event)
+                        if mouse_event.is_valid():
+                            event_callback(mouse_event)
+                else:
+                    time.sleep(0.05)
         except KeyboardInterrupt:
             pass
 
