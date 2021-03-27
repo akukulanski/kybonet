@@ -4,7 +4,6 @@ import yaml
 import zmq
 import logging
 import os
-import time
 from collections import defaultdict
 from input_devices import find_devices, RelativeMovement, is_key_match, \
                           PseudoEvent, is_mouse
@@ -131,14 +130,27 @@ def main(args=None):
             logger.info('Found device: {}'.format(d.name))
             devices.append(d)
             d.read()
-
     assert len(devices), 'No devices found'
+    selector = DefaultSelector()
+    for d in devices:
+        selector.register(d, EVENT_READ)
 
     state = State(subs, devices=devices)
     hotkeys = []
 
     def add_hotkey(hotkey, callback, args):
         hotkeys.append((hotkey, callback, args))
+
+    def exit_program(reason='-'):
+        logger.info('Exit ({})'.format(reason))
+        for k, pressed in state.pressed_keys.items():
+            if pressed:
+                new_event = PseudoEvent.KeyRelease(k)
+                send_event(new_event)
+        state.ungrab_all()
+        for d in devices:
+            selector.unregister(d)
+        exit(0)
 
     # assign hotkeys
     if 'switch_hotkey' in config:
@@ -148,20 +160,20 @@ def main(args=None):
         logger.warning('Ignoring switch key due to missing "switch_hotkey" '
                        'field in config.')
 
+    if 'exit_hotkey' in config:
+        add_hotkey(config['exit_hotkey'], exit_program,
+                   args=('Exit key pressed',))
+        logger.info('Switch key is: {}'.format(config['switch_hotkey']))
+    else:
+        logger.warning('Ignoring exit key due to missing "exit_hotkey" '
+                       'field in config.')
+
     for i in range(len(subs)):
         s = subs[i]
         if 'hotkey' in s and s['hotkey']:
             add_hotkey(s['hotkey'], state.switch, args=(i,))
             logger.info('Hotkey for {} is {}'.format(s['name'],
                                                      s['hotkey']))
-
-    def is_the_same_event(event_a, event_b):
-        if (event_a['event_type'] == event_b['event_type'] and
-                event_a['scan_code'] == event_b['scan_code'] and
-                event_a['name'] == event_b['name']):
-            return True
-        else:
-            return False
 
     def merge_events(events):
         merged_events = []
@@ -219,7 +231,6 @@ def main(args=None):
                 for k, pressed in state.pressed_keys.items():
                     if pressed:
                         new_event = PseudoEvent.KeyRelease(k)
-                        logger.warning('Sending event: {}'.format(new_event))
                         send_event(new_event)
                 run_hotkey_callback(event)
             else:
@@ -245,10 +256,6 @@ def main(args=None):
         encrypted = encrypt(message=to_send_str.encode('utf-8'),
                             public_key=state.current_sub['public_key'])
         socket.send(encrypted)
-
-    selector = DefaultSelector()
-    for d in devices:
-        selector.register(d, EVENT_READ)
 
     logger.info('Key event publisher is now active.')
     logger.info('Current subscriber: {}'.format(state.current_sub['name']))
