@@ -34,10 +34,12 @@ def load_subscribers(subs):
     Reads the public key of every subscriber and stores it in the field
     'public_key'.
     """
+    loaded_subs = []
     for s in subs:
         if 'key' not in s or not s['key']:
             s['public_key'] = None
             s['is_local'] = True
+            loaded_subs.append(s)
             logger.info('Client with no key --> local usage of the devices')
         else:
             try:
@@ -45,13 +47,12 @@ def load_subscribers(subs):
                     key = import_public_key(f.read())
                 s['public_key'] = key
                 s['is_local'] = False
+                loaded_subs.append(s)
+                logger.info('Successfully imported key for "{}"'.format(s['name']))
             except Exception as e:
                 logger.error(e)
                 logger.warning('Error importing key for "{}"'.format(s['name']))
-                subs.remove(s)
-                continue
-            logger.info('Successfully imported key for "{}"'.format(s['name']))
-
+    return loaded_subs
 
 class State:
     """
@@ -118,7 +119,7 @@ def main(args=None):
         config = yaml.load(f.read(), Loader=yaml.FullLoader)
 
     subs = config['subscribers']
-    load_subscribers(subs)
+    subs = load_subscribers(subs)
     assert len(subs), 'No subscribers available'
 
     devices = find_devices()
