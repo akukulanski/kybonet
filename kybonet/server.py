@@ -1,13 +1,15 @@
 import argparse
-import keyboard
 import json
 import yaml
 import zmq
-import select
 import logging
 import os
-import mouse_dev
+import time
+from collections import defaultdict
+from input_devices import find_devices, RelativeMovement, is_key_match, \
+                          PseudoEvent, is_mouse
 from crypto import import_public_key, encrypt
+from selectors import DefaultSelector, EVENT_READ
 
 
 if __name__ == '__main__':
@@ -33,59 +35,74 @@ def load_subscribers(subs):
     'public_key'.
     """
     for s in subs:
-        try:
-            with open(s['key'], 'rb') as f:
-                key = import_public_key(f.read())
-            s['public_key'] = key
-        except Exception as e:
-            logger.error(e)
-            logger.warning('Error importing key for "{}"'.format(s['name']))
-            subs.remove(s)
-            continue
-        logger.info('Successfully imported key for "{}"'.format(s['name']))
-
-
-class KeyboardHookContext:
-    """
-    Profilactic Context Manager:
-    The hook returns a destructor. If you forget to use it and lose the object
-    reference, the hook will continue 'hooking' forever.
-    """
-    def __init__(self, callback):
-        self._callback = callback
-
-    def __enter__(self):
-        self._h = keyboard.hook(self._callback)
-        return self._h
-
-    def __exit__(self, type, value, traceback):
-        self._h()
+        if 'key' not in s or not s['key']:
+            s['public_key'] = None
+            s['is_local'] = True
+            logger.info('Client with no key --> local usage of the devices')
+        else:
+            try:
+                with open(s['key'], 'rb') as f:
+                    key = import_public_key(f.read())
+                s['public_key'] = key
+                s['is_local'] = False
+            except Exception as e:
+                logger.error(e)
+                logger.warning('Error importing key for "{}"'.format(s['name']))
+                subs.remove(s)
+                continue
+            logger.info('Successfully imported key for "{}"'.format(s['name']))
 
 
 class State:
     """
     Class to track the current state.
     """
-    def __init__(self, subscribers):
+    def __init__(self, subscribers, devices):
         self._subscribers = subscribers
-        self.current_sub = 0
+        self.current_idx = 0
         self.last_event = None
+        self.pressed_keys = defaultdict(lambda: False)
+        self.devices = devices
+        self.grabbed = False
+        self.switch(idx=0)
 
     def next(self):
-        self.current_sub += 1
-        self.current_sub %= len(self._subscribers)
-        logger.info('Current sub: {} ({})'.format(
-                self.current_sub,
-                self._subscribers[self.current_sub]['name']))
+        next_idx = (self.current_idx + 1) % len(self._subscribers)
+        self.switch(next_idx)
 
-    def switch(self, sub):
-        if sub < len(self._subscribers):
-            self.current_sub = sub
+    def switch(self, idx):
+        if idx < len(self._subscribers):
+            if self.current_sub['is_local']:
+                self.ungrab_all()
+            self.current_idx = idx
+            if self.current_sub['is_local']:
+                self.grab_all()
             logger.info('Jumped to sub: {} ({})'.format(
-                self.current_sub,
-                self._subscribers[self.current_sub]['name']))
+                self.current_idx,
+                self.current_sub['name']))
         else:
-            logger.warning('Ignoring invalid sub: {}'.format(sub))
+            logger.warning('Ignoring invalid sub: {}'.format(idx))
+
+    @property
+    def current_sub(self):
+        return self._subscribers[self.current_idx]
+
+    def grab_all(self):
+        if self.grabbed:
+            return
+        self.grabbed = True
+        for d in self.devices:
+            d.grab()
+
+    def ungrab_all(self):
+        if not self.grabbed:
+            return
+        self.grabbed = False
+        for d in self.devices:
+            d.ungrab()
+
+    def __del__(self):
+        self.ungrab_all()
 
 
 def main(args=None):
@@ -104,13 +121,24 @@ def main(args=None):
     load_subscribers(subs)
     assert len(subs), 'No subscribers available'
 
-    state = State(subs)
-    ignore_list = []
+    devices = find_devices()
+    assert len(devices), 'No devices found'
+
+    for d in devices:
+        logger.info('Found device: {}'.format(d.name))
+        d.read()
+
+    state = State(subs, devices=devices)
+    # ignore_list = []
+    hotkeys = []
+
+    def add_hotkey(hotkey, callback, args):
+        hotkeys.append((hotkey, callback, args))
 
     # assign hotkeys
     if 'switch_hotkey' in config:
-        keyboard.add_hotkey(config['switch_hotkey'], state.next, args=())
-        ignore_list.append(config['switch_hotkey'])
+        add_hotkey(config['switch_hotkey'], state.next, args=())
+        # ignore_list.append(config['switch_hotkey'])
         logger.info('Switch key is: {}'.format(config['switch_hotkey']))
     else:
         logger.warning('Ignoring switch key due to missing "switch_hotkey" '
@@ -119,8 +147,8 @@ def main(args=None):
     for i in range(len(subs)):
         s = subs[i]
         if 'hotkey' in s and s['hotkey']:
-            keyboard.add_hotkey(s['hotkey'], state.switch, args=(i,))
-            ignore_list.append(s['hotkey'])
+            add_hotkey(s['hotkey'], state.switch, args=(i,))
+            # ignore_list.append(s['hotkey'])
             logger.info('Hotkey for {} is {}'.format(s['name'],
                                                      s['hotkey']))
 
@@ -134,7 +162,7 @@ def main(args=None):
 
     def merge_events(events):
         merged_events = []
-        rel_movement = mouse_dev.RelativeMovement()
+        rel_movement = RelativeMovement()
         for e in events:
             if e.is_rel_movement():
                 x, y, wheel = e.get_rel_movement()
@@ -151,58 +179,88 @@ def main(args=None):
         rel_movement.set(0, 0, 0)
         return merged_events
 
-    def event_callback(event):
-        """
-        args:
-            event   type: one of [keyboard.KeyboardEvent, mouse.ButtonEvent,
-                    mouse.WheelEvent, mouse.MoveEvent]
-        """
-        logger.debug('Event: {}'.format(event))
-        if isinstance(event, keyboard.KeyboardEvent):
-            if event.name in ignore_list:
-                logger.debug('Ignored hotkey event ({}).'.format(event.name))
-                return
-            fields = ['scan_code', 'name', 'event_type', 'time']
-        elif isinstance(event, mouse_dev.MouseEvent):
-            fields = ['etype', 'code', 'value', 'time']
+    def matches_hotkey(event):
+        for key, _, __ in hotkeys:
+            if is_key_match(event.code, key):
+                return True
+        return False
 
+    def is_hotkey_down(event):
+        return event.is_key_pressed() and matches_hotkey(event)
+
+    def is_hotkey_up(event):
+        return event.is_key_released() and matches_hotkey(event)
+
+    def remove_hostkey_press(events):
+        return [e for e in events if not(is_hotkey_down(e))]
+
+    def run_hotkey_callback(event):
+        for key, callback, args in hotkeys:
+            if is_key_match(event.code, key):
+                callback(*args)
+                return
+        keys = [h[0] for h in hotkeys]
+        logger.warning('Key {} not found in hotkeys {}'.format(key, keys))
+
+    def parse_events(device, events):
+        events = [PseudoEvent.from_event(e) for e in events]
+        if is_mouse(device):
+            events = [e for e in events if e.is_valid_mouse_event()]
+            events = merge_events(events)
+        else:
+            events = [e for e in events if e.is_valid_keyboard_event()]
+            events = remove_hostkey_press(events)
+        for event in events:
+            if is_hotkey_up(event):
+                logger.info('Hotkey detected ({}).'.format(event.code))
+                for k, pressed in state.pressed_keys.items():
+                    if pressed:
+                        new_event = PseudoEvent.KeyRelease(k)
+                        logger.warning('Sending event: {}'.format(new_event))
+                        send_event(new_event)
+                run_hotkey_callback(event)
+            else:
+                send_event(event)
+        return
+
+    def send_event(event):
+        if state.current_sub['is_local']:
+            logger.debug('Local user, nothing done.')
+            return
+
+        if event.is_key_pressed() and state.pressed_keys[event.code]:
+            return
+
+        if event.is_key_pressed():
+            state.pressed_keys[event.code] = True
+        elif event.is_key_released():
+            state.pressed_keys[event.code] = False
+
+        fields = ['etype', 'code', 'value', 'time']
         event_dict = {k: getattr(event, k) for k in fields}
-
-        if isinstance(event, keyboard.KeyboardEvent):
-            # check if it's the same as the previous one
-            if state.last_event and is_the_same_event(event_dict,
-                                                      state.last_event):
-                return
-            state.last_event = event_dict
-
         to_send_str = json.dumps(event_dict)
+        logger.debug('Send(): {}'.format(to_send_str))
         encrypted = encrypt(message=to_send_str.encode('utf-8'),
-                            public_key=subs[state.current_sub]['public_key'])
+                            public_key=state.current_sub['public_key'])
         socket.send(encrypted)
 
-    devices = mouse_dev.find_devices()
-    assert len(devices), 'No mouses found'
-    device = devices[0]
-    device_fd = device.fd
-    device.read()
-    MouseEventConstructor = mouse_dev.MouseEvent.from_event
+    selector = DefaultSelector()
+    for d in devices:
+        selector.register(d, EVENT_READ)
 
-    with KeyboardHookContext(event_callback):
-        logger.info('Key event publisher is now active.')
-        logger.info('Current subscriber: {}'.format(
-                            subs[state.current_sub]['name']))
-        try:
-            while True:
-                r, _w, _e = select.select([device_fd], [], [], 0.05)
-                if r:
-                    raw_events = list(device.read())
-                    events = [MouseEventConstructor(e) for e in raw_events]
-                    valid_events = [e for e in events if e.is_valid()]
-                    merged_events = merge_events(valid_events)
-                    for mouse_event in merged_events:
-                        event_callback(mouse_event)
-        except KeyboardInterrupt:
-            pass
+    logger.info('Key event publisher is now active.')
+    logger.info('Current subscriber: {}'.format(state.current_sub['name']))
+
+    try:
+        while True:
+            for key, mask in selector.select():
+                device = key.fileobj
+                events = list(device.read())
+                parse_events(device, events)
+    except KeyboardInterrupt:
+        pass
+
+    state.ungrab_all()
 
 
 if __name__ == '__main__':
