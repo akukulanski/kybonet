@@ -1,4 +1,3 @@
-import cryptography
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
@@ -41,24 +40,21 @@ def import_private_key(key):
 
 def encrypt(message, public_key):
     encrypted = public_key.encrypt(
-        message,
-        padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None
-        )
-    )
+                    message,
+                    padding.OAEP(
+                        mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                        algorithm=hashes.SHA256(),
+                        label=None))
     return encrypted
 
 
 def decrypt(message, private_key):
-    decrypted = private_key.decrypt(message,
-        padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None
-        )
-    )
+    decrypted = private_key.decrypt(
+                    message,
+                    padding.OAEP(
+                        mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                        algorithm=hashes.SHA256(),
+                        label=None))
     return decrypted
 
 
@@ -88,14 +84,15 @@ def main():
             print('File {} already exists.'.format(full_path_pub))
         else:
             break
-        
+
     keys_pair = generate_keys()
     private = serialize_private_key(keys_pair.private)
     public = serialize_public_key(keys_pair.public)
-    with open(os.open(full_path_pub, os.O_CREAT | os.O_WRONLY, 0o444), 'wb') as f:
+    flags = os.O_CREAT | os.O_WRONLY
+    with open(os.open(full_path_pub, flags, 0o444), 'wb') as f:
         f.write(public)
     print('Generated public key in "{}".'.format(full_path_pub))
-    with open(os.open(full_path_priv, os.O_CREAT | os.O_WRONLY, 0o400), 'wb') as f:
+    with open(os.open(full_path_priv, flags, 0o400), 'wb') as f:
         f.write(private)
     print('Generated private key in "{}".'.format(full_path_priv))
 
