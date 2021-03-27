@@ -34,60 +34,43 @@ python3 -m venv venv
 1. Install the required packages in both the server and the clients.
 
 ```bash
-python3 -m pip install -r requirements.txt
+git clone https://github.com/akukulanski/kybonet.git
+python3 -m pip install ./kybonet
 ```
 
-2. Generate public/private keys pair.
+2. Generate public/private keys pair (one in each client).
 
 ```bash
 # generate
-python3 kybonet/crypto.py
+kybonet-keygen
 # Copy public key to the server
 scp <filename.pub> <user>@<host>:<path>/
 ```
 
-3. In the server side, add the path of every client's public key in the config
-file *kybonet/config.yml*.
+3. In the server side, add the path of every client's public key in a config
+file like [this example](./kybonet/config.yml).
 
-4. Check the permissions of the input devices with `ls -las /dev/input` and
-if necessary add your user to the corresponding group
+4. In the server side, check the permissions of the input devices with
+`ls -las /dev/input` and if necessary add your user to the corresponding group
 (`usermod -aG <group> <user>`).
 
-5. Check the available devices in the server with
-`python3 kybonet/input_devices.py`. Add the ones you want to capture to the
-list of devices in the config file.
-
-Example of *config.yml*:
-```yaml
-subscribers:
-  - name: 'client-1'
-    key: '/root/id_client1.pub'
-    hotkey: False
-  - name: 'client-2'
-    key: '/root/id_client2.pub'
-    hotkey: 'f8'
-switch_hotkey: 'f7'
-devices:
-  - 'device-...'
-  - 'device-...'
-```
+5. Check the available devices in the server with `kybonet-devices`. Add the
+ones you want to capture to the list of devices in the config file.
 
 
 ### Run
 
-* Run the server in the computer with the keyboard/mouse.
+1. Run the server in the computer with the keyboard/mouse.
 
 ```bash
-python3 kybonet/server.py -p <PORT> -c <config-file>
+kybonet-server -p <PORT> -c <config-file>
 ```
 
-* Run the clients in the other computers.
+2. Run the clients in the other computers.
 
 ```bash
-python3 kybonet/client.py <SERVER-IP> -p <PORT> -i <PATH_PRIVATE_KEY>
+kybonet-client <SERVER-IP> -p <PORT> -i <PATH_PRIVATE_KEY>
 ```
 
-**NOTE:** To increment the verbosity set the env `DEBUG`.
 
-5. Start typing!
-
+3. Start typing!
