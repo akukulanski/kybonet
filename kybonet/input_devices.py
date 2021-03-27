@@ -8,15 +8,15 @@ _ev_key_codes = {ecodes.BTN_MOUSE: 'left',
                  ecodes.BTN_SIDE: 'side',
                  ecodes.BTN_EXTRA: 'extra'}
 
-_ev_key_types = {0: 'up',
-                 1: 'down'}
+_ev_key_values = {0: 'up',
+                  1: 'down'}
 
 _ev_rel_codes = {ecodes.REL_X: 'deltaX',
                  ecodes.REL_Y: 'deltaY',
                  ecodes.REL_WHEEL: 'deltaWheel'}
 
 
-class MouseEvent:
+class PseudoEvent:
     def __init__(self, etype, code, value, time):
         self.etype = etype
         self.code = code
@@ -27,26 +27,45 @@ class MouseEvent:
     def from_event(cls, event):
         return cls(event.type, event.code, event.value, time.time())
 
-    def is_valid(self):
+    @classmethod
+    def KeyPress(cls, code):
+        return cls(etype=ecodes.EV_KEY, code=code, value=1, time=time.time())
+
+    @classmethod
+    def KeyRelease(cls, code):
+        return cls(etype=ecodes.EV_KEY, code=code, value=0, time=time.time())
+
+    @property
+    def type(self):
+        return self.etype
+
+    def is_valid_mouse_event(self):
         if self.etype == ecodes.EV_REL:
             if self.code in _ev_rel_codes:
                 return True
         if self.etype == ecodes.EV_KEY:
-            if (self.code in _ev_key_codes and self.value in _ev_key_types):
+            if (self.code in _ev_key_codes and self.value in _ev_key_values):
                 return True
         return False
 
-    def __str__(self):
-        if self.etype == ecodes.EV_REL:
-            fmt = 'MouseRelative(x={}, y={}, wheel={}, time={})'
-            x, y, wheel = self.get_rel_movement()
-            return fmt.format(x, y, wheel, self.time)
-        elif self.etype == ecodes.EV_KEY:
-            fmt = 'MouseKey(button="{}", action="{}", time={})'
-            button = _ev_key_codes[self.code]
-            action = _ev_key_types[self.value]
-            return fmt.format(button, action, self.time)
-        return 'MouseUnknown()'
+    def is_valid_keyboard_event(self):
+        if self.is_valid_mouse_event():
+            return False
+        return self.is_key_pressed() or self.is_key_released()
+
+    def is_key_pressed(self):
+        if self.etype != ecodes.EV_KEY:
+            return False
+        if self.value != 1:
+            return False
+        return True
+
+    def is_key_released(self):
+        if self.etype != ecodes.EV_KEY:
+            return False
+        if self.value != 0:
+            return False
+        return True
 
     def is_rel_movement(self):
         return self.etype == ecodes.EV_REL
@@ -59,6 +78,23 @@ class MouseEvent:
         else:
             x, y, wheel = (0, 0, 0)
         return (x, y, wheel)
+
+    def __str__(self):
+        try:
+            if self.is_valid_mouse_event():
+                if self.is_rel_movement():
+                    fmt = 'MouseMove(x={}, y={}, wheel={}, time={})'
+                    x, y, wheel = self.get_rel_movement()
+                    return fmt.format(x, y, wheel, self.time)
+                elif self.etype == ecodes.EV_KEY:
+                    fmt = 'MouseButton(button="{}", action="{}", time={})'
+                    button = _ev_key_codes[self.code]
+                    action = _ev_key_values[self.value]
+                    return fmt.format(button, action, self.time)
+        except KeyError:
+            pass
+        fmt = 'Event(type={}, code={}, value={})'
+        return fmt.format(self.etype, self.code, self.value)
 
 
 class RelativeMovement:
@@ -91,20 +127,21 @@ class RelativeMovement:
     def generate_events(self):
         events = []
         if self.x != 0:
-            events.append(MouseEvent(etype=ecodes.EV_REL, code=ecodes.REL_X,
-                                     value=self.x, time=self.time))
+            events.append(PseudoEvent(etype=ecodes.EV_REL, code=ecodes.REL_X,
+                                      value=self.x, time=self.time))
         if self.y != 0:
-            events.append(MouseEvent(etype=ecodes.EV_REL, code=ecodes.REL_Y,
-                                     value=self.y, time=self.time))
+            events.append(PseudoEvent(etype=ecodes.EV_REL, code=ecodes.REL_Y,
+                                      value=self.y, time=self.time))
         if self.wheel != 0:
-            events.append(MouseEvent(etype=ecodes.EV_REL, code=ecodes.REL_WHEEL,
-                                     value=self.wheel, time=self.time))
+            events.append(PseudoEvent(etype=ecodes.EV_REL,
+                                      code=ecodes.REL_WHEEL, value=self.wheel,
+                                      time=self.time))
         return events
 
 
-class FakeMouse:
-    _cap = {ecodes.EV_KEY: [*_ev_key_codes.keys()],
-            ecodes.EV_REL: [*_ev_rel_codes.keys()]}
+class FakeDevice:
+    _cap = {ecodes.EV_KEY: [*ecodes.keys.keys()],
+            ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y, ecodes.REL_WHEEL]}
 
     def __init__(self, name, version=0x1):
         self.name = name
@@ -118,7 +155,7 @@ class FakeMouse:
         self.write(event.etype, event.code, event.value)
 
 
-def _is_mouse(device):
+def is_mouse(device):
     c = device.capabilities()
     if ecodes.EV_KEY in c:
         if ecodes.BTN_MOUSE in c[ecodes.EV_KEY]:
@@ -126,7 +163,24 @@ def _is_mouse(device):
     return False
 
 
+def is_keyboard(device):
+    c = device.capabilities()
+    if ecodes.EV_KEY in c:
+        if ecodes.KEY_A in c[ecodes.EV_KEY]:
+            return True
+    return False
+
+
 def find_devices():
-    _devices = [evdev.InputDevice(fn) for fn in evdev.list_devices()]
-    _mouses = [d for d in _devices if _is_mouse(d)]
-    return _mouses
+    devices = [evdev.InputDevice(fn) for fn in evdev.list_devices()]
+    devices = [d for d in devices if is_mouse(d) or is_keyboard(d)]
+    return devices
+
+
+def is_key_match(key_ecode, key_str):
+    attr = 'KEY_' + key_str.upper()
+    if not hasattr(ecodes, attr):
+        return False
+    if key_ecode == getattr(ecodes, attr):
+        return True
+    return False
