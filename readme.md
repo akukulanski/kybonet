@@ -24,10 +24,16 @@ decode them.
 
 ### Setup
 
+0. (optional) Create a venv.
+
+```bash
+python3 -m venv venv
+. venv/bin/activate
+```
+
 1. Install the required packages in both the server and the clients.
 
 ```bash
-apt install python3 python3-pip
 python3 -m pip install -r requirements.txt
 ```
 
@@ -35,13 +41,21 @@ python3 -m pip install -r requirements.txt
 
 ```bash
 # generate
-python3 crypto.py
+python3 kybonet/crypto.py
 # Copy public key to the server
 scp <filename.pub> <user>@<host>:<path>/
 ```
 
 3. In the server side, add the path of every client's public key in the config
-file *config.yml*:
+file *kybonet/config.yml*.
+
+4. Check the permissions of the input devices with `ls -las /dev/input` and
+if necessary add your user to the corresponding group
+(`usermod -aG <group> <user>`).
+
+5. Check the available devices in the server with
+`python3 kybonet/input_devices.py`. Add the ones you want to capture to the
+list of devices in the config file.
 
 Example of *config.yml*:
 ```yaml
@@ -53,35 +67,27 @@ subscribers:
     key: '/root/id_client2.pub'
     hotkey: 'f8'
 switch_hotkey: 'f7'
+devices:
+  - 'device-...'
+  - 'device-...'
 ```
+
 
 ### Run
 
-**NOTE:** The *keyboard* package used by this tool requires root privileges to
-capture the keyboard. It makes sense, since this is esencially a keylogger.
-Nevertheless, always take a look at the code before running random code from
-github! I take no responsibility for any damage it can cause... `/(·_·)\`
-
-**Tip:** To avoid duplicating every Python package for the *root* user, just set
-the PYTHONPATH acordingly. For example, if you have python3.7, you'll probably
-have the packages installed in `/home/<YOUR-USER>/.local/lib/python3.7/site-packages/`.
-If you are using a virtual env, even better!
-
-* Run the server in the computer with the keyboard.
+* Run the server in the computer with the keyboard/mouse.
 
 ```bash
-sudo su -c "PYTHONPATH=path/to/python/packages python3 server.py -p <PORT>"
+python3 kybonet/server.py -p <PORT> -c <config-file>
 ```
 
 * Run the clients in the other computers.
 
 ```bash
-sudo su -c "PYTHONPATH=path/to/python/packages python3 client.py <SERVER-IP> -p <PORT> -i <PATH_PRIVATE_KEY>"
+python3 kybonet/client.py <SERVER-IP> -p <PORT> -i <PATH_PRIVATE_KEY>
 ```
+
+**NOTE:** To increment the verbosity set the env `DEBUG`.
 
 5. Start typing!
 
-**NOTE:** since this'll run with root, it's better to create the keys also
-with root so the private key is not visible to less privileged users.
-
-**NOTE:** To increment the verbosity set the env `DEBUG`.
