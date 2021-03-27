@@ -9,6 +9,7 @@ subscribers:
     key: False
     hotkey: False
 switch_hotkey: 'f7'
+exit_hotkey: 'f3'
 devices:
   - 'YSPRINGTECH USB OPTICAL MOUSE'
   - 'SINO WEALTH Gaming KB  Keyboard'
