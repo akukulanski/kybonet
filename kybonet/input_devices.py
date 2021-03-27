@@ -186,8 +186,12 @@ def is_key_match(key_ecode, key_str):
     return False
 
 
-if __name__ == '__main__':
+def main():
     devices = find_devices()
     print('Found {} devices.'.format(len(devices)))
     for d in devices:
         print('Device: "{}"'.format(d.name))
+
+
+if __name__ == '__main__':
+    main()
