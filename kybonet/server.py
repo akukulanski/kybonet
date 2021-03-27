@@ -5,10 +5,11 @@ import zmq
 import logging
 import os
 from collections import defaultdict
-from input_devices import find_devices, RelativeMovement, is_key_match, \
-                          PseudoEvent, is_mouse
-from crypto import import_public_key, encrypt
 from selectors import DefaultSelector, EVENT_READ
+import kybonet
+from .input_devices import find_devices, RelativeMovement, is_key_match, \
+                          PseudoEvent, is_mouse
+from .crypto import import_public_key, encrypt
 
 
 if __name__ == '__main__':
@@ -21,9 +22,11 @@ else:
 
 
 def parse_args(args=None):
+    default_config_file = kybonet.__path__[0] + '/config.yml'
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--port', type=int, default=5555, help='port')
-    parser.add_argument('-c', '--config', type=str, default='./config.yml',
+    parser.add_argument('-c', '--config', type=str,
+                        default=default_config_file,
                         help='YML configuration file')
     return parser.parse_args(args)
 
