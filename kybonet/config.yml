@@ -5,4 +5,7 @@ subscribers:
   - name: 'client-2'
     key: './id_rsa2.pub'
     hotkey: 'f8'
+  - name: 'local'
+    key: False
+    hotkey: False
 switch_hotkey: 'f7'
