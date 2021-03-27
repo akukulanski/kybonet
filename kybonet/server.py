@@ -122,15 +122,16 @@ def main(args=None):
     subs = load_subscribers(subs)
     assert len(subs), 'No subscribers available'
 
-    devices = find_devices()
+    devices = []
+    for d in find_devices():
+        if d.name in config['devices']:
+            logger.info('Found device: {}'.format(d.name))
+            devices.append(d)
+            d.read()
+
     assert len(devices), 'No devices found'
 
-    for d in devices:
-        logger.info('Found device: {}'.format(d.name))
-        d.read()
-
     state = State(subs, devices=devices)
-    # ignore_list = []
     hotkeys = []
 
     def add_hotkey(hotkey, callback, args):
@@ -139,7 +140,6 @@ def main(args=None):
     # assign hotkeys
     if 'switch_hotkey' in config:
         add_hotkey(config['switch_hotkey'], state.next, args=())
-        # ignore_list.append(config['switch_hotkey'])
         logger.info('Switch key is: {}'.format(config['switch_hotkey']))
     else:
         logger.warning('Ignoring switch key due to missing "switch_hotkey" '
@@ -149,7 +149,6 @@ def main(args=None):
         s = subs[i]
         if 'hotkey' in s and s['hotkey']:
             add_hotkey(s['hotkey'], state.switch, args=(i,))
-            # ignore_list.append(s['hotkey'])
             logger.info('Hotkey for {} is {}'.format(s['name'],
                                                      s['hotkey']))
 
