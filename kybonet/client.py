@@ -3,8 +3,8 @@ import json
 import zmq
 import logging
 import os
-from crypto import import_private_key, decrypt
-from input_devices import PseudoEvent, FakeDevice
+from .crypto import import_private_key, decrypt
+from .input_devices import PseudoEvent, FakeDevice
 
 if __name__ == '__main__':
     debug = os.getenv('DEBUG', None)
