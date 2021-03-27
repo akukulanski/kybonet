@@ -6,14 +6,6 @@ import os
 from .crypto import import_private_key, decrypt
 from .input_devices import PseudoEvent, FakeDevice
 
-if __name__ == '__main__':
-    debug = os.getenv('DEBUG', None)
-    level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(level=level)
-    logger = logging.getLogger()
-else:
-    logger = logging.getLogger(__name__)
-
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser()
@@ -27,8 +19,12 @@ def parse_args(args=None):
 
 
 def main(args=None):
-    args = parse_args(args=args)
+    debug = os.getenv('DEBUG', None)
+    level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(level=level)
+    logger = logging.getLogger(__name__)
 
+    args = parse_args(args=args)
     ip = args.ip
     port = args.port
     id_rsa = args.id_rsa
