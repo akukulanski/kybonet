@@ -7,8 +7,8 @@ import os
 from collections import defaultdict
 from selectors import DefaultSelector, EVENT_READ
 import kybonet
-from .input_devices import find_devices, RelativeMovement, is_key_match, \
-                          PseudoEvent, is_mouse
+from .input_devices import find_devices, RelativeMovement, PseudoEvent, \
+                           is_mouse, keycode_from_str
 from .crypto import import_public_key, encrypt
 
 
@@ -139,8 +139,15 @@ def main(args=None):
     state = State(subs, devices=devices)
     hotkeys = []
 
-    def add_hotkey(hotkey, callback, args):
-        hotkeys.append((hotkey, callback, args))
+    def add_hotkey(key, callback, args):
+        if isinstance(key, int):
+            keycode = key
+        elif isinstance(key, str):
+            keycode = keycode_from_str(key)
+        assert isinstance(keycode, int), 'Invalid key: "{}"'.format(key)
+        new_hotkey = (keycode, callback, args)
+        hotkeys.append(new_hotkey)
+        return new_hotkey
 
     def exit_program(reason='-'):
         logger.info('Exit ({})'.format(reason))
@@ -154,27 +161,32 @@ def main(args=None):
         exit(0)
 
     # assign hotkeys
-    if 'switch_hotkey' in config:
-        add_hotkey(config['switch_hotkey'], state.next, args=())
-        logger.info('Switch key is: {}'.format(config['switch_hotkey']))
-    else:
-        logger.warning('Ignoring switch key due to missing "switch_hotkey" '
-                       'field in config.')
+    _hotkeys_config = [
+        ('switch_hotkey', state.next, ()),
+        ('exit_hotkey', exit_program, ('Exit key pressed',)),
+    ]
 
-    if 'exit_hotkey' in config:
-        add_hotkey(config['exit_hotkey'], exit_program,
-                   args=('Exit key pressed',))
-        logger.info('Exit key is: {}'.format(config['exit_hotkey']))
-    else:
-        logger.warning('Ignoring exit key due to missing "exit_hotkey" '
-                       'field in config.')
+    _hotkeys_to_assign = []
+
+    for name, callback, args in _hotkeys_config:
+        if name in config and config[name]:
+            _hotkeys_to_assign.append((config[name], callback, args))
+        else:
+            logger.warning('No key assigned for "{}"'.format(name))
 
     for i in range(len(subs)):
         s = subs[i]
         if 'hotkey' in s and s['hotkey']:
-            add_hotkey(s['hotkey'], state.switch, args=(i,))
-            logger.info('Hotkey for {} is {}'.format(s['name'],
-                                                     s['hotkey']))
+            _hotkeys_to_assign.append((s['hotkey'], state.switch, (i,)))
+
+    for key, callback, args in _hotkeys_to_assign:
+        try:
+            add_hotkey(key=key, callback=callback, args=args)
+        except AssertionError as e:
+            logger.error(e)
+            exit_program(reason=str(e))
+        fmt = 'Key assigned for "{}": "{}"'
+        logger.info(fmt.format(config[name], config[name]))
 
     def merge_events(events):
         merged_events = []
@@ -197,7 +209,7 @@ def main(args=None):
 
     def matches_hotkey(event):
         for key, _, __ in hotkeys:
-            if is_key_match(event.code, key):
+            if key == event.code:
                 return True
         return False
 
@@ -212,7 +224,7 @@ def main(args=None):
 
     def run_hotkey_callback(event):
         for key, callback, args in hotkeys:
-            if is_key_match(event.code, key):
+            if key == event.code:
                 callback(*args)
                 return
         keys = [h[0] for h in hotkeys]
