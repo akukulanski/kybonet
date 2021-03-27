@@ -40,7 +40,7 @@ def load_subscribers(subs):
             s['public_key'] = None
             s['is_local'] = True
             loaded_subs.append(s)
-            logger.info('Client with no key --> local usage of the devices')
+            logger.info('Client with no key: local usage of the devices')
         else:
             try:
                 with open(s['key'], 'rb') as f:
@@ -53,6 +53,7 @@ def load_subscribers(subs):
                 logger.error(e)
                 logger.warning('Error importing key for "{}"'.format(s['name']))
     return loaded_subs
+
 
 class State:
     """
@@ -73,10 +74,10 @@ class State:
 
     def switch(self, idx):
         if idx < len(self._subscribers):
-            if self.current_sub['is_local']:
-                self.ungrab_all()
             self.current_idx = idx
             if self.current_sub['is_local']:
+                self.ungrab_all()
+            else:
                 self.grab_all()
             logger.info('Jumped to sub: {} ({})'.format(
                 self.current_idx,
@@ -91,6 +92,7 @@ class State:
     def grab_all(self):
         if self.grabbed:
             return
+        logger.debug('grab()')
         self.grabbed = True
         for d in self.devices:
             d.grab()
@@ -98,6 +100,7 @@ class State:
     def ungrab_all(self):
         if not self.grabbed:
             return
+        logger.debug('ungrab()')
         self.grabbed = False
         for d in self.devices:
             d.ungrab()
@@ -239,7 +242,6 @@ def main(args=None):
         fields = ['etype', 'code', 'value', 'time']
         event_dict = {k: getattr(event, k) for k in fields}
         to_send_str = json.dumps(event_dict)
-        logger.debug('Send(): {}'.format(to_send_str))
         encrypted = encrypt(message=to_send_str.encode('utf-8'),
                             public_key=state.current_sub['public_key'])
         socket.send(encrypted)
