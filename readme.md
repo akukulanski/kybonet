@@ -1,4 +1,4 @@
-# Kybonet - software KVM switch with encryption!
+# Kybonet - software KM switch with encryption!
 
 ### Description
 
