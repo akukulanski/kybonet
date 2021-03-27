@@ -177,13 +177,12 @@ def find_devices():
     return devices
 
 
-def is_key_match(key_ecode, key_str):
+def keycode_from_str(key_str):
     attr = 'KEY_' + key_str.upper()
-    if not hasattr(ecodes, attr):
-        return False
-    if key_ecode == getattr(ecodes, attr):
-        return True
-    return False
+    if hasattr(ecodes, attr):
+        return getattr(ecodes, attr)
+    else:
+        return None
 
 
 def main():
