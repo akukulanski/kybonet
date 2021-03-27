@@ -12,13 +12,7 @@ from .input_devices import find_devices, RelativeMovement, is_key_match, \
 from .crypto import import_public_key, encrypt
 
 
-if __name__ == '__main__':
-    debug = os.getenv('DEBUG', None)
-    level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(level=level)
-    logger = logging.getLogger()
-else:
-    logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def parse_args(args=None):
@@ -112,8 +106,12 @@ class State:
 
 
 def main(args=None):
-    args = parse_args(args=args)
+    debug = os.getenv('DEBUG', None)
+    level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(level=level)
+    logger = logging.getLogger()
 
+    args = parse_args(args=args)
     port = args.port
     context = zmq.Context()
     socket = context.socket(zmq.PUB)
@@ -166,7 +164,7 @@ def main(args=None):
     if 'exit_hotkey' in config:
         add_hotkey(config['exit_hotkey'], exit_program,
                    args=('Exit key pressed',))
-        logger.info('Switch key is: {}'.format(config['switch_hotkey']))
+        logger.info('Exit key is: {}'.format(config['exit_hotkey']))
     else:
         logger.warning('Ignoring exit key due to missing "exit_hotkey" '
                        'field in config.')
@@ -230,7 +228,7 @@ def main(args=None):
             events = remove_hostkey_press(events)
         for event in events:
             if is_hotkey_up(event):
-                logger.info('Hotkey detected ({}).'.format(event.code))
+                logger.debug('Hotkey detected ({}).'.format(event.code))
                 for k, pressed in state.pressed_keys.items():
                     if pressed:
                         new_event = PseudoEvent.KeyRelease(k)
