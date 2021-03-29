@@ -11,8 +11,18 @@ def long_description():
         return f.read()
 
 
+def get_version():
+    import setuptools_scm
+    import setuptools_scm.git
+    return setuptools_scm.get_version(root='.',
+                                      parse=setuptools_scm.git.parse)
+
+
+version = get_version()
+print('version={}'.format(version))
+
 setup(name='kybonet',
-      version='0.1.0',
+      version=version,
       author='Ariel Kukulanski',
       author_email='akukulanski@gmail.com',
       description='Software KVM switch over the network with encryption (keyboard and mouse only, no video).',
@@ -22,6 +32,7 @@ setup(name='kybonet',
       url='https://github.com/akukulanski/kybonet',
       # download_url=,
       keywords=['keyboard', 'mouse', 'kvm', 'switch', 'encrypt'],
+      setup_requires=['setuptools_scm'],
       install_requires=install_requires(),
       include_package_data=True,
       entry_points={'console_scripts': [
