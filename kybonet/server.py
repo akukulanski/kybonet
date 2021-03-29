@@ -16,13 +16,21 @@ from .crypto import import_public_key, encrypt
 logger = logging.getLogger(__name__)
 
 
+class DeviceNotFound(Exception):
+    pass
+
+
+class UnknownHotkey(Exception):
+    pass
+
+
 def parse_args(args=None):
     default_config_file = kybonet.__path__[0] + '/config.yml'
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--port', type=int, default=5555, help='port')
+    parser.add_argument('-p', '--port', type=int, default=5555, help='Port.')
     parser.add_argument('-c', '--config', type=str,
                         default=default_config_file,
-                        help='YML configuration file')
+                        help='YML configuration file.')
     verbosity = parser.add_mutually_exclusive_group(required=False)
     verbosity.add_argument('-q', '--quiet', action='store_true',
                            help='Reduce output messages.')
@@ -51,9 +59,6 @@ class KybonetServer:
         self._pressed_keys = defaultdict(lambda: False)
         self._grabbed = False
 
-    # def __del__(self):
-    #     self.ungrab_all()
-
     @property
     def subs(self):
         return self._subs
@@ -66,7 +71,6 @@ class KybonetServer:
         self._context = zmq.Context()
         self._socket = self._context.socket(zmq.PUB)
         self._socket.bind("tcp://*:{}".format(port))
-        logger.info('Running zmq publisher on port {}'.format(port))
 
     def add_subscriber(self, name, id_file=None, hotkey=None):
         new_sub = {'name': name, 'public_key': None, 'is_local': False,
@@ -85,7 +89,7 @@ class KybonetServer:
                                 'callback': self.switch,
                                 'args': (len(self._subs),)}
         self._subs.append(new_sub)
-        logger.debug('Client added: {}'.format(name))
+        logger.debug('Client added: {}.'.format(name))
 
     def scan_devices(self):
         self._devices_connected = find_devices()
@@ -96,7 +100,7 @@ class KybonetServer:
                 self._devices.append(d)
                 logger.debug('Found device "{}"'.format(name))
                 return
-        raise RuntimeError('Device "{}" not present'.format(name))
+        raise DeviceNotFound('Device "{}" not present.'.format(name))
 
     def _empty_hotkeys(self):
         return {'switch': {'key': None,
@@ -128,7 +132,7 @@ class KybonetServer:
 
     def exit_program(self, reason='-'):
         self.teardown()
-        logger.info('Exit.')
+        logger.info('Exit')
         os._exit(0)
 
     def next(self):
@@ -196,7 +200,8 @@ class KybonetServer:
             if hotkey['key'] == event.code:
                 hotkey['callback'](*hotkey['args'])
                 return
-        raise RuntimeError('Key code {} is not a hotkey.'.format(event.ecode))
+        raise UnknownHotkey('Key code {} is not a valid hotkey'.format(
+                                                                event.ecode))
 
     def parse_events(self, device, events):
         events = [PseudoEvent.from_event(e) for e in events]
@@ -209,7 +214,7 @@ class KybonetServer:
                         not(e.is_key_pressed() and self.event_is_hotkey(e)))]
         for event in events:
             if self.event_is_hotkey(event) and event.is_key_released():
-                logger.debug('Hotkey detected ({}).'.format(event.code))
+                logger.debug('Hotkey detected ({})'.format(event.code))
                 for k, pressed in self._pressed_keys.items():
                     if pressed:
                         new_event = PseudoEvent.KeyRelease(k)
@@ -221,7 +226,7 @@ class KybonetServer:
 
     def _send_event(self, event):
         if self.current_sub['is_local']:
-            logger.debug('Local user, nothing done.')
+            logger.debug('Local user, nothing done...')
             return
 
         if event.is_key_pressed() and self._pressed_keys[event.code]:
@@ -243,10 +248,6 @@ class KybonetServer:
         for d in self._devices:
             self._selector.register(d, EVENT_READ)
 
-        logger.info('Kybonet server is now active.')
-        logger.info('Current subscriber is: {}'.format(
-                self.current_sub['name']))
-
         self.switch(idx=0)
         try:
             while True:
@@ -262,11 +263,18 @@ def main(args=None):
     args = parse_args(args=args)
 
     if args.quiet:
-        logging.basicConfig(level=logging.ERROR)
+        log_level = logging.ERROR
     elif args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
+        log_level = logging.DEBUG
     else:
-        logging.basicConfig(level=logging.INFO)
+        log_level = logging.INFO
+
+    if os.getenv('DEBUG', False):
+        log_fmt = '%(levelname)s - %(name)s: %(message)s'
+    else:
+        log_fmt = '%(levelname)s - %(message)s'
+
+    logging.basicConfig(level=log_level, format=log_fmt)
 
     with open(args.config, 'r') as f:
         config = yaml.load(f.read(), Loader=yaml.FullLoader)
@@ -278,24 +286,25 @@ def main(args=None):
         server.add_subscriber(**s)
 
     if len(server.subs) == 0:
-        logger.error('No subscribers available.')
+        logger.error('No subscribers available')
         sys.exit(1)
 
     server.scan_devices()
     for d in config['devices']:
         try:
             server.add_device(d)
-        except RuntimeError as e:
-            logger.error(e)
+        except DeviceNotFound as e:
+            logger.warning(e)
 
     if len(server.devices) == 0:
-        logger.error('No devices available.')
+        logger.error('No devices available')
         sys.exit(1)
 
     for name, key in config['hotkeys'].items():
         if key:
             server.assign_hotkey(name, key)
 
+    logger.info('Kybonet server running on port {}'.format(args.port))
     server.run()
 
 
