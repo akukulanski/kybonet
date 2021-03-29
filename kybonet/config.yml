@@ -1,15 +1,15 @@
 subscribers:
   - name: 'client-1'
-    key: './id_rsa1.pub'
+    id_file: './id_rsa1.pub'
     hotkey: False
   - name: 'client-2'
-    key: './id_rsa2.pub'
+    id_file: './id_rsa2.pub'
     hotkey: 'f8'
   - name: 'local'
-    key: False
     hotkey: False
-switch_hotkey: 'f7'
-exit_hotkey: 'f3'
+hotkeys:
+  switch: 'f7'
+  exit: 'f3'
 devices:
   - 'YSPRINGTECH USB OPTICAL MOUSE'
   - 'SINO WEALTH Gaming KB  Keyboard'
