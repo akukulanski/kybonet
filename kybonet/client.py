@@ -2,9 +2,10 @@ import argparse
 import json
 import zmq
 import logging
-import os
 from .crypto import import_private_key, decrypt
 from .input_devices import PseudoEvent, FakeDevice
+
+logger = logging.getLogger(__name__)
 
 
 def parse_args(args=None):
@@ -15,16 +16,24 @@ def parse_args(args=None):
                         help='rsa private key path')
     parser.add_argument('-sim', '--simulate', action='store_true',
                         help='Simulate, don\'t press/release any key.')
+    verbosity = parser.add_mutually_exclusive_group(required=False)
+    verbosity.add_argument('-q', '--quiet', action='store_true',
+                           help='Reduce output messages.')
+    verbosity.add_argument('-v', '--verbose', action='store_true',
+                           help='Increment output messages.')
     return parser.parse_args(args)
 
 
 def main(args=None):
-    debug = os.getenv('DEBUG', None)
-    level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(level=level)
-    logger = logging.getLogger(__name__)
-
     args = parse_args(args=args)
+
+    if args.quiet:
+        logging.basicConfig(level=logging.ERROR)
+    elif args.verbose:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
+
     ip = args.ip
     port = args.port
     id_rsa = args.id_rsa
@@ -33,14 +42,13 @@ def main(args=None):
     socket = context.socket(zmq.SUB)
     socket.connect("tcp://{}:{}".format(ip, port))
     socket.subscribe('')
-    logger.info('running zmq subscriber on {}:{}'.format(ip, port))
+    logger.debug('running zmq subscriber on {}:{}'.format(ip, port))
 
-    device = FakeDevice(name='my-fake-mouse')
+    device = FakeDevice(name='my-fake-device')
 
     with open(id_rsa, 'rb') as f:
         private_key = import_private_key(f.read())
 
-    logger.info('key event subscriber is now active')
     while True:
         rcv = socket.recv()
         try:
