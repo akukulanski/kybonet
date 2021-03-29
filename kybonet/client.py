@@ -1,6 +1,7 @@
 import argparse
 import json
 import zmq
+import os
 import logging
 from .crypto import import_private_key, decrypt
 from .input_devices import PseudoEvent, FakeDevice
@@ -24,44 +25,63 @@ def parse_args(args=None):
     return parser.parse_args(args)
 
 
+class KybonetClient:
+    def __init__(self):
+        # zmq
+        self._context = None
+        self._socket = None
+
+    def connect(self, ip, port):
+        self._context = zmq.Context()
+        self._socket = self._context.socket(zmq.SUB)
+        self._socket.connect("tcp://{}:{}".format(ip, port))
+        self._socket.subscribe('')
+
+    def run(self, key, simulate=False):
+        device = FakeDevice(name='my-fake-device')
+        while True:
+            rcv = self._socket.recv()
+            try:
+                decrypted = decrypt(message=rcv, private_key=key)
+            except ValueError:
+                txt = 'Unable to decode message... May be it wasn\'t for you?'
+                logger.debug(txt)
+                continue
+            message = decrypted.decode('utf-8')
+            decoded_event = json.loads(message)
+            event = PseudoEvent(**decoded_event)
+            if not simulate:
+                device.write_event(event)
+
+
 def main(args=None):
     args = parse_args(args=args)
 
     if args.quiet:
-        logging.basicConfig(level=logging.ERROR)
+        log_level = logging.ERROR
     elif args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
+        log_level = logging.DEBUG
     else:
-        logging.basicConfig(level=logging.INFO)
+        log_level = logging.INFO
 
-    ip = args.ip
-    port = args.port
-    id_rsa = args.id_rsa
-    simulate = args.simulate
-    context = zmq.Context()
-    socket = context.socket(zmq.SUB)
-    socket.connect("tcp://{}:{}".format(ip, port))
-    socket.subscribe('')
-    logger.debug('running zmq subscriber on {}:{}'.format(ip, port))
+    if os.getenv('DEBUG', False):
+        log_fmt = '%(levelname)s - %(name)s: %(message)s'
+    else:
+        log_fmt = '%(levelname)s - %(message)s'
 
-    device = FakeDevice(name='my-fake-device')
+    logging.basicConfig(level=log_level, format=log_fmt)
 
-    with open(id_rsa, 'rb') as f:
+    client = KybonetClient()
+    client.connect(ip=args.ip, port=args.port)
+
+    with open(args.id_rsa, 'rb') as f:
         private_key = import_private_key(f.read())
 
-    while True:
-        rcv = socket.recv()
-        try:
-            decrypted = decrypt(message=rcv, private_key=private_key)
-        except ValueError:
-            txt = 'Unable to decode message... May be it wasn\'t for you?'
-            logger.debug(txt)
-            continue
-        message = decrypted.decode('utf-8')
-        decoded_event = json.loads(message)
-        event = PseudoEvent(**decoded_event)
-        if not simulate:
-            device.write_event(event)
+    logger.info('Connected to {}:{}'.format(args.ip, args.port))
+    try:
+        client.run(key=private_key, simulate=args.simulate)
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == '__main__':
