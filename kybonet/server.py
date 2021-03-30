@@ -3,6 +3,7 @@ import json
 import yaml
 import zmq
 import logging
+import shutil
 import sys
 import os
 from collections import defaultdict
@@ -25,11 +26,10 @@ class UnknownHotkey(Exception):
 
 
 def parse_args(args=None):
-    default_config_file = kybonet.__path__[0] + '/config.yml'
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--port', type=int, default=5555, help='Port.')
     parser.add_argument('-c', '--config', type=str,
-                        default=default_config_file,
+                        default=None,
                         help='YML configuration file.')
     verbosity = parser.add_mutually_exclusive_group(required=False)
     verbosity.add_argument('-q', '--quiet', action='store_true',
@@ -276,7 +276,20 @@ def main(args=None):
 
     logging.basicConfig(level=log_level, format=log_fmt)
 
-    with open(args.config, 'r') as f:
+    if args.config:
+        config_file = args.config
+    else:
+        logger.info('Config file not specified. Using default.')
+        config_file = os.path.expanduser("~") + '/.local/kybonet/config.yml'
+        dir_name = os.path.dirname(config_file)
+        if not os.path.isdir(dir_name):
+            os.makedirs(dir_name)
+        if not os.path.isfile(config_file):
+            default_config_file = kybonet.__path__[0] + '/config.yml'
+            shutil.copyfile(default_config_file, config_file)
+    assert os.path.isfile(config_file), 'File not found: {}'.format(config_file)
+    logger.info('Loading config file: {}'.format(config_file))
+    with open(config_file, 'r') as f:
         config = yaml.load(f.read(), Loader=yaml.FullLoader)
 
     server = KybonetServer()
