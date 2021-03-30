@@ -13,8 +13,9 @@ def parse_args(args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('ip', type=str, help='ip')
     parser.add_argument('-p', '--port', type=int, default=5555, help='port')
-    parser.add_argument('-i', '--id-rsa', type=str, default='~/id_rsa',
-                        help='rsa private key path')
+    parser.add_argument('-i', '--id-rsa', type=str, default=None,
+                        required=True, help='Private key path (generate one '
+                        'with kybonet-generate)')
     parser.add_argument('-sim', '--simulate', action='store_true',
                         help='Simulate, don\'t press/release any key.')
     verbosity = parser.add_mutually_exclusive_group(required=False)
