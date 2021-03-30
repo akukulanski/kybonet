@@ -1,12 +1,12 @@
 subscribers:
-  - name: 'client-1'
-    id_file: './id_rsa1.pub'
-    hotkey: False
-  - name: 'client-2'
-    id_file: './id_rsa2.pub'
-    hotkey: 'f8'
   - name: 'local'
     hotkey: False
+  # - name: 'client-1'
+  #   id_file: 'path/to/key1.pub'
+  #   hotkey: False
+  # - name: 'client-2'
+  #   id_file: 'path/to/key2.pub'
+  #   hotkey: 'f8'
 hotkeys:
   switch: 'f7'
   exit: 'f3'
