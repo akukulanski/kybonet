@@ -22,55 +22,81 @@ of the 2nd client to encrypt the events. Now only the 2nd client'll be able to
 decode them.
 
 
-### Setup
+### Setup the client
 
-0. (optional) Create a venv.
+* 0. (optional) Create a venv.
 
 ```bash
 python3 -m venv venv
 . venv/bin/activate
 ```
 
-1. Install the required packages in both the server and the clients.
+* 1. Install the required packages.
 
 ```bash
-git clone https://github.com/akukulanski/kybonet.git
-python3 -m pip install ./kybonet
+pip install kybonet
 ```
 
-2. Generate public/private keys pair (one in each client).
+* 2. Generate public/private keys pair (one in each client).
 
 ```bash
 # generate
 kybonet-keygen
 # Copy public key to the server
-scp <filename.pub> <user>@<host>:<path>/
+scp <public-key.pub> <user>@<server>:<path>/
 ```
 
-3. In the server side, add the path of every client's public key in a config
-file like [this example](./kybonet/config.yml).
+* 3. Run.
 
-4. In the server side, check the permissions of the input devices with
-`ls -las /dev/input` and if necessary add your user to the corresponding group
-(`usermod -aG <group> <user>`).
-
-5. Check the available devices in the server with `kybonet-devices`. Add the
-ones you want to capture to the list of devices in the config file.
+```bash
+kybonet-client <server-ip> -p <port> -i <private-key>
+```
 
 
-### Run
+### Setup the server
 
-1. Run the server in the computer with the keyboard/mouse.
+* 0. (optional) Create a venv.
+
+```bash
+python3 -m venv venv
+. venv/bin/activate
+```
+
+* 1. Install the required packages.
+
+```bash
+pip install kybonet
+```
+
+* 2. List the available devices and identify the ones you want to be shared:
+
+```bash
+kybonet-devices
+```
+
+**Note:** It's likely that you need to add your user to the *input* group in
+order to have access to the input devies. Check that with `ls -las /dev/input`
+and add it with `usermod -aG <group> <user>`. **You'll have to login again so
+the change take effect.**
+
+* 3. Open the default config file or get a copy of it
+(*~/.local/kybonet/config.yml*). Add as many clients as you want, with at
+least a name and the path to their public key (the hotkey field is optional).
+In case you don't like the default values, you can also assign the hotkeys you
+want to switch between clients and to exit the program.
+
+* 4. Run.
 
 ```bash
 kybonet-server -p <PORT> -c <config-file>
 ```
 
-2. Run the clients in the other computers.
+**Note:** If the config-file is ommited, it'll be loaded from
+*~/.local/kybonet/config.yml*. If you want a fresh start, remove it and when
+you run `kybonet-server` a new one'll be created.
 
-```bash
-kybonet-client <SERVER-IP> -p <PORT> -i <PATH_PRIVATE_KEY>
-```
+### Info
 
+Please report any issues [here](https://github.com/akukulanski/kybonet/issues).
 
-3. Start typing!
+Start typing, and have fun!
