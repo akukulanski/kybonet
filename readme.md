@@ -24,20 +24,20 @@ decode them.
 
 ### Setup the client
 
-* 0. (optional) Create a venv.
+* Step 0 - (optional) Create a venv.
 
 ```bash
 python3 -m venv venv
 . venv/bin/activate
 ```
 
-* 1. Install the required packages.
+* Step 1 - Install the required packages.
 
 ```bash
 pip install kybonet
 ```
 
-* 2. Generate public/private keys pair (one in each client).
+* Step 2 - Generate public/private keys pair (one in each client).
 
 ```bash
 # generate
@@ -46,7 +46,7 @@ kybonet-keygen
 scp <public-key.pub> <user>@<server>:<path>/
 ```
 
-* 3. Run.
+* Step 3 - Run.
 
 ```bash
 kybonet-client <server-ip> -p <port> -i <private-key>
@@ -55,20 +55,20 @@ kybonet-client <server-ip> -p <port> -i <private-key>
 
 ### Setup the server
 
-* 0. (optional) Create a venv.
+* Step 0 - (optional) Create a venv.
 
 ```bash
 python3 -m venv venv
 . venv/bin/activate
 ```
 
-* 1. Install the required packages.
+* Step 1 - Install the required packages.
 
 ```bash
 pip install kybonet
 ```
 
-* 2. List the available devices and identify the ones you want to be shared:
+* Step 2 - List the available devices and identify the ones you want to be shared:
 
 ```bash
 kybonet-devices
@@ -79,13 +79,13 @@ order to have access to the input devies. Check that with `ls -las /dev/input`
 and add it with `usermod -aG <group> <user>`. **You'll have to login again so
 the change take effect.**
 
-* 3. Open the default config file or get a copy of it
+* Step 3 - Open the default config file or get a copy of it
 (*~/.local/kybonet/config.yml*). Add as many clients as you want, with at
 least a name and the path to their public key (the hotkey field is optional).
 In case you don't like the default values, you can also assign the hotkeys you
 want to switch between clients and to exit the program.
 
-* 4. Run.
+* Step 4 - Run.
 
 ```bash
 kybonet-server -p <PORT> -c <config-file>
