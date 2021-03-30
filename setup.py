@@ -7,7 +7,7 @@ def install_requires():
 
 
 def long_description():
-    with open("README.rst") as f:
+    with open("readme.md") as f:
         return f.read()
 
 
@@ -27,6 +27,7 @@ setup(name='kybonet',
       author_email='akukulanski@gmail.com',
       description='Software KVM switch over the network with encryption (keyboard and mouse only, no video).',
       long_description=long_description(),
+      long_description_content_type='text/markdown',
       packages=find_packages(),
       license='BSD',
       python_requires="~=3.6",
