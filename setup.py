@@ -12,10 +12,11 @@ def long_description():
 
 
 def get_version():
-    import setuptools_scm
-    import setuptools_scm.git
-    return setuptools_scm.get_version(root='.',
-                                      parse=setuptools_scm.git.parse)
+    # import setuptools_scm
+    # import setuptools_scm.git
+    # return setuptools_scm.get_version(root='.',
+    #                                   parse=setuptools_scm.git.parse)
+    return "0.0.9"
 
 
 version = get_version()
