@@ -69,6 +69,9 @@ class KybonetServer:
 
     def connect(self, port):
         self._context = zmq.Context()
+        # ZMQ Socket Options: http://api.zeromq.org/4-2:zmq-setsockopt
+        # Send ZMTP heartbeats every 5000 ms.
+        self._context.setsockopt(zmq.HEARTBEAT_IVL, 5000)
         self._socket = self._context.socket(zmq.PUB)
         self._socket.bind("tcp://*:{}".format(port))
 
